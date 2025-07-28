@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 
+const API_BASE_URL = 'http://localhost:8000'
+
 function App() {
   const [currentScreen, setCurrentScreen] = useState('welcome') // 'welcome', 'registration', 'dateOfBirth', 'contact', 'verification', 'success', 'passcode', 'passcodeConfirm', 'citizenship', 'city', 'finalSuccess'
   const [isLoading, setIsLoading] = useState(false)
@@ -29,6 +31,7 @@ function App() {
     email: '',
     phoneNumber: ''
   })
+  const [userId, setUserId] = useState('')
 
   const countries = [
     { code: '+95', flag: '🇲🇲', name: 'Myanmar', format: 'xxx xxx xxxx' },
@@ -417,7 +420,7 @@ function App() {
     })
   }
 
-  const resendCode = () => {
+  const resendCode = async () => {
     // Check if cooldown is active
     if (resendCooldown > 0) {
       showNotification(`Please wait ${resendCooldown} seconds before requesting another code`, 'error')
@@ -430,17 +433,25 @@ function App() {
       return
     }
 
-    // Clear verification code
-    setVerificationCode(['', '', '', '', '', ''])
-    
-    // Increment resend count
-    setResendCount(prev => prev + 1)
-    
-    // Set cooldown (60 seconds)
-    setResendCooldown(60)
-    
-    // Show success message
-    showNotification(`Verification code sent to ${formData.email}`, 'success')
+    try {
+      setIsLoading(true)
+      
+      // Clear verification code
+      setVerificationCode(['', '', '', '', '', ''])
+      
+      // Call API to resend verification code
+      const result = await sendVerificationCode()
+      
+      // Set cooldown (60 seconds)
+      setResendCooldown(60)
+      
+      // Show success message
+      showNotification(result.message, 'success')
+    } catch (error) {
+      showNotification(error.message || 'Failed to resend verification code', 'error')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const selectCountry = (country) => {
@@ -470,6 +481,104 @@ function App() {
     return emailRegex.test(email)
   }
 
+  // API Integration Functions
+  const apiCall = async (endpoint, method = 'GET', data = null) => {
+    try {
+      const config = {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }
+      
+      if (data) {
+        config.body = JSON.stringify(data)
+      }
+      
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, config)
+      const result = await response.json()
+      
+      if (!response.ok) {
+        throw new Error(result.detail || 'API request failed')
+      }
+      
+      return result
+    } catch (error) {
+      console.error('API Error:', error)
+      throw error
+    }
+  }
+
+  const registerUser = async () => {
+    const registrationData = {
+      firstName: formData.firstName,
+      middleName: formData.middleName,
+      lastName: formData.lastName,
+      dateOfBirth: formData.dateOfBirth,
+      email: formData.email,
+      phoneNumber: formData.phoneNumber,
+      countryCode: selectedCountry.code,
+      countryName: selectedCountry.name
+    }
+    
+    const result = await apiCall('/api/users/register', 'POST', registrationData)
+    setUserId(result.user_id)
+    return result
+  }
+
+  const sendVerificationCode = async () => {
+    const result = await apiCall('/api/users/send-verification', 'POST', { email: formData.email })
+    setResendCount(result.resend_count)
+    return result
+  }
+
+  const verifyEmail = async (code) => {
+    const result = await apiCall('/api/users/verify-email', 'POST', { 
+      email: formData.email, 
+      code: code 
+    })
+    return result
+  }
+
+  const setUserPasscode = async (passcode) => {
+    const result = await apiCall('/api/users/set-passcode', 'POST', { 
+      user_id: userId, 
+      passcode: passcode 
+    })
+    return result
+  }
+
+  const verifyUserPasscode = async (passcode) => {
+    const result = await apiCall('/api/users/verify-passcode', 'POST', { 
+      user_id: userId, 
+      passcode: passcode 
+    })
+    return result
+  }
+
+  const setCitizenship = async (citizenships) => {
+    const result = await apiCall('/api/users/set-citizenship', 'POST', { 
+      user_id: userId, 
+      citizenships: citizenships 
+    })
+    return result
+  }
+
+  const setCity = async (city) => {
+    const result = await apiCall('/api/users/set-city', 'POST', { 
+      user_id: userId, 
+      city: city 
+    })
+    return result
+  }
+
+  const completeRegistration = async () => {
+    const result = await apiCall('/api/users/complete-registration', 'POST', { 
+      user_id: userId 
+    })
+    return result
+  }
+
   const convertToDateInput = (ddmmyyyy) => {
     if (ddmmyyyy.length === 10) {
       const [day, month, year] = ddmmyyyy.split('/')
@@ -478,85 +587,105 @@ function App() {
     return ''
   }
 
-  const handleNext = () => {
-    if (currentScreen === 'registration') {
-      if (formData.firstName && formData.lastName) {
-        setCurrentScreen('dateOfBirth')
-      } else {
-        showNotification('Please fill in required fields (First name and Last name)', 'error')
-      }
-    } else if (currentScreen === 'dateOfBirth') {
-      if (formData.dateOfBirth && formData.dateOfBirth.length === 10) {
-        if (dateError) {
-          showNotification(`Please enter a valid date: ${dateError}`, 'error')
-          return
-        }
-        setCurrentScreen('contact')
-      } else {
-        showNotification('Please enter your complete date of birth (DD/MM/YYYY)', 'error')
-      }
-    } else if (currentScreen === 'contact') {
-      if (formData.email && formData.phoneNumber) {
-        if (!validateEmail(formData.email)) {
-          showNotification('Please enter a valid email address', 'error')
-          return
-        }
-        if (formData.phoneNumber.length < 6) {
-          showNotification('Please enter a valid phone number', 'error')
-          return
-        }
-        setCurrentScreen('verification')
-        // Reset resend stats when entering verification
-        setResendCount(0)
-        setResendCooldown(0)
-        // Simulate sending verification code
-        setTimeout(() => {
-          showNotification(`Verification code sent to ${formData.email}`, 'success')
-        }, 500)
-      } else {
-        showNotification('Please fill in both email and phone number', 'error')
-      }
-    } else if (currentScreen === 'verification') {
-      const code = verificationCode.join('')
-      if (code.length === 6) {
-        setCurrentScreen('success')
-      } else {
-        showNotification('Please enter the complete 6-digit verification code', 'error')
-      }
-    } else if (currentScreen === 'success') {
-      setCurrentScreen('passcode')
-    } else if (currentScreen === 'passcode') {
-      const code = passcode.join('')
-      if (code.length === 6) {
-        setCurrentScreen('passcodeConfirm')
-      } else {
-        showNotification('Please create a complete 6-digit passcode', 'error')
-      }
-    } else if (currentScreen === 'passcodeConfirm') {
-      const originalCode = passcode.join('')
-      const confirmCode = confirmPasscode.join('')
-      if (confirmCode.length === 6) {
-        if (originalCode === confirmCode) {
-          setCurrentScreen('citizenship')
+  const handleNext = async () => {
+    setIsLoading(true)
+    
+    try {
+      if (currentScreen === 'registration') {
+        if (formData.firstName && formData.lastName) {
+          setCurrentScreen('dateOfBirth')
         } else {
-          showNotification('Passcodes do not match. Please try again.', 'error')
-          setConfirmPasscode(['', '', '', '', '', ''])
+          showNotification('Please fill in required fields (First name and Last name)', 'error')
         }
-      } else {
-        showNotification('Please confirm your complete 6-digit passcode', 'error')
+      } else if (currentScreen === 'dateOfBirth') {
+        if (formData.dateOfBirth && formData.dateOfBirth.length === 10) {
+          if (dateError) {
+            showNotification(`Please enter a valid date: ${dateError}`, 'error')
+            return
+          }
+          setCurrentScreen('contact')
+        } else {
+          showNotification('Please enter your complete date of birth (DD/MM/YYYY)', 'error')
+        }
+      } else if (currentScreen === 'contact') {
+        if (formData.email && formData.phoneNumber) {
+          if (!validateEmail(formData.email)) {
+            showNotification('Please enter a valid email address', 'error')
+            return
+          }
+          if (formData.phoneNumber.length < 6) {
+            showNotification('Please enter a valid phone number', 'error')
+            return
+          }
+          
+          const result = await registerUser()
+          
+          // Reset resend stats when entering verification
+          setResendCount(0)
+          setResendCooldown(0)
+          
+          // Send verification code
+          const verificationResult = await sendVerificationCode()
+          
+          setCurrentScreen('verification')
+          showNotification(verificationResult.message, 'success')
+        } else {
+          showNotification('Please fill in both email and phone number', 'error')
+        }
+      } else if (currentScreen === 'verification') {
+        const code = verificationCode.join('')
+        if (code.length === 6) {
+          await verifyEmail(code)
+          setCurrentScreen('success')
+        } else {
+          showNotification('Please enter the complete 6-digit verification code', 'error')
+        }
+      } else if (currentScreen === 'success') {
+        setCurrentScreen('passcode')
+      } else if (currentScreen === 'passcode') {
+        const code = passcode.join('')
+        if (code.length === 6) {
+          await setUserPasscode(code)
+          setCurrentScreen('passcodeConfirm')
+        } else {
+          showNotification('Please create a complete 6-digit passcode', 'error')
+        }
+      } else if (currentScreen === 'passcodeConfirm') {
+        const originalCode = passcode.join('')
+        const confirmCode = confirmPasscode.join('')
+        if (confirmCode.length === 6) {
+          if (originalCode === confirmCode) {
+            await verifyUserPasscode(confirmCode)
+            setCurrentScreen('citizenship')
+          } else {
+            showNotification('Passcodes do not match. Please try again.', 'error')
+            setConfirmPasscode(['', '', '', '', '', ''])
+          }
+        } else {
+          showNotification('Please confirm your complete 6-digit passcode', 'error')
+        }
+      } else if (currentScreen === 'citizenship') {
+        if (selectedCitizenships.length > 0) {
+          await setCitizenship(selectedCitizenships)
+          setCurrentScreen('city')
+        } else {
+          showNotification('Please select at least one citizenship', 'error')
+        }
+      } else if (currentScreen === 'city') {
+        if (selectedCity) {
+          await setCity(selectedCity)
+          setCurrentScreen('finalSuccess')
+          
+          const result = await completeRegistration()
+          showNotification(result.message, 'success')
+        } else {
+          showNotification('Please select your living city', 'error')
+        }
       }
-    } else if (currentScreen === 'citizenship') {
-      if (selectedCitizenships.length > 0) {
-        setCurrentScreen('city')
-      } else {
-        showNotification('Please select at least one citizenship', 'error')
-      }
-    } else if (currentScreen === 'city') {
-      if (selectedCity) {
-        setCurrentScreen('finalSuccess')
-      } else {
-        showNotification('Please select your living city', 'error')
-      }
+    } catch (error) {
+      showNotification(error.message || 'An error occurred. Please try again.', 'error')
+    } finally {
+      setIsLoading(false)
     }
   }
 

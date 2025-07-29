@@ -1,0 +1,24 @@
+{
+  "name": "send-otp-email",
+  "version": "1.0.0",
+  "description": "UC ERA OTP Email sending function using Resend API",
+  "main": "src/main.js",
+  "type": "module",
+  "scripts": {
+    "build": "echo 'No build required'",
+    "test": "echo 'No tests configured'"
+  },
+  "dependencies": {
+    "node-appwrite": "^12.0.0"
+  },
+  "keywords": [
+    "appwrite",
+    "function",
+    "email",
+    "otp",
+    "resend",
+    "ucera"
+  ],
+  "author": "UC ERA Development Team",
+  "license": "ISC"
+} 

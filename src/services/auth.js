@@ -1,4 +1,4 @@
-import { account, databases, functions, DATABASE_ID, COLLECTIONS, ID } from '../lib/appwrite.js';
+import { account, databases, functions, DATABASE_ID, COLLECTIONS, ID, Query } from '../lib/appwrite.js';
 
 class AuthService {
     // Register Step 1: Names
@@ -197,21 +197,21 @@ class AuthService {
                 DATABASE_ID,
                 COLLECTIONS.OTP_CODES,
                 [
-                    `userId=${userId}`,
-                    `isUsed=false`,
-                    `expiresAt>${new Date().toISOString()}`
+                    Query.equal('userId', userId),
+                    Query.equal('isUsed', false),
+                    Query.greaterThan('expiresAt', new Date().toISOString())
                 ]
             );
 
             if (otpResponse.documents.length === 0) {
-                throw new Error('No valid OTP found');
+                throw new Error('No valid OTP found or OTP has expired');
             }
 
             const otpDoc = otpResponse.documents[0];
             
             // Check attempts
             if (otpDoc.attempts >= 3) {
-                throw new Error('Maximum verification attempts exceeded');
+                throw new Error('Maximum verification attempts exceeded. Please request a new OTP.');
             }
 
             // Verify code
@@ -223,7 +223,13 @@ class AuthService {
                     otpDoc.$id,
                     { attempts: otpDoc.attempts + 1 }
                 );
-                throw new Error('Invalid OTP code');
+                
+                const remainingAttempts = 3 - (otpDoc.attempts + 1);
+                if (remainingAttempts > 0) {
+                    throw new Error(`Invalid OTP code. ${remainingAttempts} attempts remaining.`);
+                } else {
+                    throw new Error('Invalid OTP code. Maximum attempts exceeded. Please request a new OTP.');
+                }
             }
 
             // Mark OTP as used

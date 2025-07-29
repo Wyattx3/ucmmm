@@ -108,6 +108,15 @@ class AuthService {
             // Generate 6-digit OTP
             const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
             
+            // Get user data for personalized email
+            let userName = null;
+            try {
+                const userDoc = await databases.getDocument(DATABASE_ID, COLLECTIONS.USERS, userId);
+                userName = userDoc.fullName || userDoc.firstName;
+            } catch (err) {
+                console.warn('Could not get user name for email:', err.message);
+            }
+            
             // Store OTP in database
             const otpDoc = await databases.createDocument(
                 DATABASE_ID,
@@ -124,8 +133,34 @@ class AuthService {
                 }
             );
 
-            // In a real app, you would send email using Resend API here
-            console.log('📨 OTP generated:', otpCode); // Remove in production
+            // Send email using cloud function
+            try {
+                const functionResponse = await fetch(`${import.meta.env.VITE_APPWRITE_ENDPOINT}/functions/send-otp-email/executions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Appwrite-Project': import.meta.env.VITE_APPWRITE_PROJECT_ID
+                    },
+                    body: JSON.stringify({
+                        userId: userId,
+                        email: email,
+                        userName: userName,
+                        otpCode: otpCode
+                    })
+                });
+
+                if (!functionResponse.ok) {
+                    throw new Error('Failed to trigger email function');
+                }
+
+                const functionResult = await functionResponse.json();
+                console.log('✅ Email function triggered successfully');
+                
+            } catch (emailError) {
+                console.error('⚠️ Email sending failed, but OTP is saved:', emailError.message);
+                // Don't fail the entire process if email fails
+                console.log('📨 OTP for debugging:', otpCode); // Fallback for development
+            }
             
             return {
                 success: true,

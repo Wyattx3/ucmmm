@@ -1,4 +1,4 @@
-import { Client, Account, Databases, ID } from 'appwrite';
+import { Client, Account, Databases, ID, Query } from 'appwrite';
 
 // Appwrite configuration
 const client = new Client()
@@ -19,8 +19,8 @@ export const COLLECTIONS = {
     CITIES: 'cities'
 };
 
-// Helper to generate unique IDs
-export { ID };
+// Helper to generate unique IDs and queries
+export { ID, Query };
 
 // Export client for direct access if needed
-export default client; 
+export default client;  

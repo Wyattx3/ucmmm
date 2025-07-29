@@ -1,4 +1,4 @@
-import { account, databases, DATABASE_ID, COLLECTIONS, ID } from '../lib/appwrite.js';
+import { databases, DATABASE_ID, COLLECTIONS, ID, Query } from '../lib/appwrite.js';
 
 class AuthService {
     // Register Step 1: Names
@@ -43,7 +43,7 @@ class AuthService {
         try {
             console.log('📅 Registering date of birth for user:', userId);
             
-            const updatedUser = await databases.updateDocument(
+            await databases.updateDocument(
                 DATABASE_ID,
                 COLLECTIONS.USERS,
                 userId,
@@ -73,7 +73,7 @@ class AuthService {
         try {
             console.log('📞 Registering contact info for user:', userId);
             
-            const updatedUser = await databases.updateDocument(
+            await databases.updateDocument(
                 DATABASE_ID,
                 COLLECTIONS.USERS,
                 userId,
@@ -153,7 +153,7 @@ class AuthService {
                     throw new Error('Failed to trigger email function');
                 }
 
-                const functionResult = await functionResponse.json();
+                await functionResponse.json();
                 console.log('✅ Email function triggered successfully');
                 
             } catch (emailError) {
@@ -185,9 +185,9 @@ class AuthService {
                 DATABASE_ID,
                 COLLECTIONS.OTP_CODES,
                 [
-                    `userId=${userId}`,
-                    `isUsed=false`,
-                    `expiresAt>${new Date().toISOString()}`
+                    Query.equal('userId', userId),
+                    Query.equal('isUsed', false),
+                    Query.greaterThan('expiresAt', new Date().toISOString())
                 ]
             );
 
@@ -376,4 +376,4 @@ class AuthService {
     }
 }
 
-export default new AuthService(); 
+export default new AuthService();    

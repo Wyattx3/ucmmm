@@ -3,7 +3,7 @@ import './App.css'
 import { useRegistration } from './hooks/useRegistration'
 
 function App() {
-  const [currentScreen, setCurrentScreen] = useState('welcome') // 'welcome', 'registration', 'dateOfBirth', 'contact', 'verification', 'success', 'passcode', 'passcodeConfirm', 'citizenship', 'city', 'finalSuccess'
+  const [currentScreen, setCurrentScreen] = useState('welcome') // 'welcome', 'registration', 'dateOfBirth', 'contact', 'verification', 'success', 'passcode', 'passcodeConfirm', 'citizenship', 'city', 'finalSuccess', 'home', 'memberCardApplication'
   
   // Use registration hook for real API calls
   const {
@@ -136,7 +136,8 @@ function App() {
   }
 
   const handleLogIn = () => {
-    showNotification('Log in feature coming soon.', 'info')
+    // For now, simulate login and go to home screen
+    setCurrentScreen('home')
   }
 
   // Name formatting handler - capitalize first letter of each word
@@ -652,6 +653,150 @@ function App() {
       return 'Max attempts reached'
     }
     return 'Need another code?'
+  }
+
+  // Handle bottom navigation clicks
+  const handleBottomNavClick = (nav) => {
+    console.log(`${nav} clicked - redirecting to Member Card application`)
+    setCurrentScreen('memberCardApplication')
+  }
+
+  // Home Screen
+  if (currentScreen === 'home') {
+    return (
+      <div className="app">
+        <div className="container">
+          {notification.show && (
+            <div className={`notification ${notification.type}`}>
+              <span className="notification-message">{notification.message}</span>
+              <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+
+          {/* Header */}
+          <div className="home-header">
+            <h1 className="home-title">UC ERA</h1>
+            <div className="home-subtitle">Welcome back!</div>
+          </div>
+
+          {/* Main Content Area */}
+          <div className="home-content">
+            <div className="member-status-card">
+              <div className="status-icon">👤</div>
+              <h2>Member Card Required</h2>
+              <p>Apply for your UC Member Card to access all features</p>
+              <button 
+                className="apply-card-btn"
+                onClick={() => setCurrentScreen('memberCardApplication')}
+              >
+                Apply for Member Card
+              </button>
+            </div>
+          </div>
+
+          {/* Bottom Navigation Bar */}
+          <div className="bottom-nav">
+            <div className="nav-item" onClick={() => handleBottomNavClick('Chat')}>
+              <div className="nav-icon">💬</div>
+              <span className="nav-label">Chat</span>
+            </div>
+            <div className="nav-item" onClick={() => handleBottomNavClick('Menu')}>
+              <div className="nav-icon">☰</div>
+              <span className="nav-label">Menu</span>
+            </div>
+            <div className="nav-item" onClick={() => handleBottomNavClick('Profile')}>
+              <div className="nav-icon">👤</div>
+              <span className="nav-label">Profile</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Member Card Application Screen
+  if (currentScreen === 'memberCardApplication') {
+    return (
+      <div className="app">
+        <div className="container">
+          {notification.show && (
+            <div className={`notification ${notification.type}`}>
+              <span className="notification-message">{notification.message}</span>
+              <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+
+          {/* Header with Back Button */}
+          <div className="member-card-header">
+            <button className="back-btn" onClick={() => setCurrentScreen('home')}>
+              ← Back
+            </button>
+            <h1 className="page-title">Member Card Application</h1>
+          </div>
+
+          {/* Application Form */}
+          <div className="member-card-content">
+            <div className="application-intro">
+              <div className="card-preview">
+                <div className="card-design">
+                  <div className="card-header">
+                    <img src="/ucera-logo.png" alt="UC ERA" className="card-logo" />
+                    <span className="card-title">UC MEMBER</span>
+                  </div>
+                  <div className="card-body">
+                    <div className="member-info">
+                      <div className="member-name">Your Name Here</div>
+                      <div className="member-id">ID: *******</div>
+                    </div>
+                    <div className="card-chip">🔒</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="application-text">
+                <h2>Apply for UC Member Card</h2>
+                <p>Get your exclusive UC Member Card with:</p>
+                <ul className="benefits-list">
+                  <li>✓ Secure digital identity</li>
+                  <li>✓ Access to all UC services</li>
+                  <li>✓ Protected personal information</li>
+                  <li>✓ Quick login with steganography</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="application-actions">
+              <button 
+                className="start-application-btn"
+                onClick={() => showNotification('Member Card application process will be implemented soon!', 'info')}
+              >
+                Start Application Process
+              </button>
+              
+              <div className="application-note">
+                <p>📱 Your card will use advanced steganography to securely store your email and date of birth for future login.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Navigation (same as home) */}
+          <div className="bottom-nav">
+            <div className="nav-item" onClick={() => handleBottomNavClick('Chat')}>
+              <div className="nav-icon">💬</div>
+              <span className="nav-label">Chat</span>
+            </div>
+            <div className="nav-item" onClick={() => handleBottomNavClick('Menu')}>
+              <div className="nav-icon">☰</div>
+              <span className="nav-label">Menu</span>
+            </div>
+            <div className="nav-item" onClick={() => handleBottomNavClick('Profile')}>
+              <div className="nav-icon">👤</div>
+              <span className="nav-label">Profile</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // Final Success Screen

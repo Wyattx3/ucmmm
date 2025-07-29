@@ -1107,3 +1107,412 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   padding: 0;
 }
 
+/* ===== HOME SCREEN STYLES ===== */
+
+/* Home Header */
+.home-header {
+  text-align: center;
+  padding: 60px 20px 40px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  margin: -20px -20px 40px;
+}
+
+.home-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin: 0 0 10px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.home-subtitle {
+  font-size: 1.1rem;
+  opacity: 0.9;
+  font-weight: 400;
+}
+
+/* Home Content */
+.home-content {
+  padding: 0 20px 120px;
+  min-height: calc(100vh - 300px);
+}
+
+.member-status-card {
+  background: white;
+  border-radius: 20px;
+  padding: 40px 20px;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+  border: 2px solid #f0f0f0;
+  margin-bottom: 30px;
+}
+
+.status-icon {
+  font-size: 3rem;
+  margin-bottom: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.member-status-card h2 {
+  color: #333;
+  font-size: 1.5rem;
+  margin-bottom: 15px;
+  font-weight: 600;
+}
+
+.member-status-card p {
+  color: #666;
+  font-size: 1rem;
+  line-height: 1.5;
+  margin-bottom: 30px;
+}
+
+.apply-card-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 25px;
+  padding: 15px 30px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+.apply-card-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
+}
+
+.apply-card-btn:active {
+  transform: translateY(0);
+}
+
+/* ===== BOTTOM NAVIGATION ===== */
+
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: space-around;
+  padding: 15px 0 25px;
+  box-shadow: 0 -5px 20px rgba(0,0,0,0.1);
+  z-index: 1000;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  padding: 10px;
+  border-radius: 15px;
+  min-width: 70px;
+}
+
+.nav-item:hover {
+  background: rgba(102, 126, 234, 0.1);
+  transform: translateY(-2px);
+}
+
+.nav-item:active {
+  transform: translateY(0);
+  background: rgba(102, 126, 234, 0.2);
+}
+
+.nav-icon {
+  font-size: 1.5rem;
+  margin-bottom: 5px;
+  transition: all 0.3s ease;
+}
+
+.nav-item:hover .nav-icon {
+  transform: scale(1.1);
+}
+
+.nav-label {
+  font-size: 0.8rem;
+  color: #666;
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+.nav-item:hover .nav-label {
+  color: #667eea;
+  font-weight: 600;
+}
+
+/* ===== MEMBER CARD APPLICATION STYLES ===== */
+
+/* Member Card Header */
+.member-card-header {
+  display: flex;
+  align-items: center;
+  padding: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  margin: -20px -20px 30px;
+  position: relative;
+}
+
+.back-btn {
+  background: rgba(255,255,255,0.2);
+  border: none;
+  color: white;
+  padding: 10px 15px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  margin-right: 15px;
+}
+
+.back-btn:hover {
+  background: rgba(255,255,255,0.3);
+  transform: translateX(-2px);
+}
+
+.page-title {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+}
+
+/* Member Card Content */
+.member-card-content {
+  padding: 0 20px 120px;
+}
+
+.application-intro {
+  margin-bottom: 40px;
+}
+
+/* Card Preview */
+.card-preview {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 30px;
+}
+
+.card-design {
+  width: 300px;
+  height: 180px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 15px;
+  padding: 20px;
+  color: white;
+  position: relative;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  overflow: hidden;
+}
+
+.card-design::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+  border-radius: 50%;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 30px;
+}
+
+.card-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  filter: brightness(0) invert(1);
+}
+
+.card-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+
+.card-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+}
+
+.member-info {
+  flex: 1;
+}
+
+.member-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+
+.member-id {
+  font-size: 0.9rem;
+  opacity: 0.8;
+  font-family: 'Courier New', monospace;
+}
+
+.card-chip {
+  font-size: 1.5rem;
+  opacity: 0.7;
+}
+
+/* Application Text */
+.application-text {
+  text-align: center;
+}
+
+.application-text h2 {
+  color: #333;
+  font-size: 1.8rem;
+  margin-bottom: 15px;
+  font-weight: 600;
+}
+
+.application-text p {
+  color: #666;
+  font-size: 1rem;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.benefits-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 30px;
+  text-align: left;
+  max-width: 300px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.benefits-list li {
+  color: #555;
+  font-size: 0.95rem;
+  margin-bottom: 10px;
+  padding-left: 5px;
+}
+
+/* Application Actions */
+.application-actions {
+  text-align: center;
+  margin-top: 40px;
+}
+
+.start-application-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 25px;
+  padding: 18px 40px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+  margin-bottom: 30px;
+}
+
+.start-application-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 35px rgba(102, 126, 234, 0.6);
+}
+
+.start-application-btn:active {
+  transform: translateY(0);
+}
+
+.application-note {
+  background: rgba(102, 126, 234, 0.1);
+  border-radius: 15px;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.application-note p {
+  color: #555;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ===== RESPONSIVE DESIGN ===== */
+
+@media (max-width: 480px) {
+  .home-title {
+    font-size: 2rem;
+  }
+  
+  .card-design {
+    width: 280px;
+    height: 170px;
+    padding: 15px;
+  }
+  
+  .member-card-header {
+    padding: 15px;
+  }
+  
+  .page-title {
+    font-size: 1.1rem;
+  }
+  
+  .application-text h2 {
+    font-size: 1.5rem;
+  }
+  
+  .start-application-btn {
+    padding: 15px 30px;
+    font-size: 1.1rem;
+  }
+}
+
+/* ===== ANIMATIONS ===== */
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.member-status-card,
+.card-preview,
+.application-text {
+  animation: slideInUp 0.6s ease-out;
+}
+
+.nav-item {
+  animation: slideInUp 0.4s ease-out;
+}
+
+.nav-item:nth-child(2) {
+  animation-delay: 0.1s;
+}
+
+.nav-item:nth-child(3) {
+  animation-delay: 0.2s;
+}
+

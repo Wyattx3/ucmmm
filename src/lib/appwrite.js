@@ -1,4 +1,4 @@
-import { Client, Account, Databases, ID } from 'appwrite';
+import { Client, Account, Databases, Functions, ID } from 'appwrite';
 
 // Appwrite configuration
 const client = new Client()
@@ -8,6 +8,7 @@ const client = new Client()
 // Initialize services
 export const account = new Account(client);
 export const databases = new Databases(client);
+export const functions = new Functions(client);
 
 // Database and Collection IDs
 export const DATABASE_ID = 'ucera-main';

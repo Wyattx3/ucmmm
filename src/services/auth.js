@@ -1,4 +1,4 @@
-import { account, databases, DATABASE_ID, COLLECTIONS, ID } from '../lib/appwrite.js';
+import { account, databases, functions, DATABASE_ID, COLLECTIONS, ID } from '../lib/appwrite.js';
 
 class AuthService {
     // Register Step 1: Names
@@ -135,29 +135,41 @@ class AuthService {
 
             // Send email using cloud function
             try {
-                const functionResponse = await fetch(`${import.meta.env.VITE_APPWRITE_ENDPOINT}/functions/send-otp-email/executions`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Appwrite-Project': import.meta.env.VITE_APPWRITE_PROJECT_ID
-                    },
-                    body: JSON.stringify({
+                console.log('🚀 Triggering cloud function for email sending...');
+                
+                const functionResponse = await functions.createExecution(
+                    'send-otp-email', // Function ID
+                    JSON.stringify({
                         userId: userId,
                         email: email,
                         userName: userName,
                         otpCode: otpCode
-                    })
-                });
+                    }), // Data payload
+                    false, // Not async
+                    '/',    // Path
+                    'POST'  // Method
+                );
 
-                if (!functionResponse.ok) {
-                    throw new Error('Failed to trigger email function');
+                console.log('✅ Email function executed successfully:', functionResponse);
+                
+                // Update OTP record with email sent status
+                try {
+                    await databases.updateDocument(
+                        DATABASE_ID,
+                        COLLECTIONS.OTP_CODES,
+                        otpDoc.$id,
+                        {
+                            emailSentAt: new Date().toISOString()
+                        }
+                    );
+                    console.log('📝 OTP record updated with email sent status');
+                } catch (updateError) {
+                    console.warn('Could not update OTP record:', updateError.message);
                 }
-
-                const functionResult = await functionResponse.json();
-                console.log('✅ Email function triggered successfully');
                 
             } catch (emailError) {
                 console.error('⚠️ Email sending failed, but OTP is saved:', emailError.message);
+                console.error('Full error details:', emailError);
                 // Don't fail the entire process if email fails
                 console.log('📨 OTP for debugging:', otpCode); // Fallback for development
             }

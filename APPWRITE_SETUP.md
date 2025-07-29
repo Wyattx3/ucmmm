@@ -237,3 +237,46 @@ const handleVerifyOTP = async () => {
 ---
 
 **Ready to integrate! Frontend can now connect to Appwrite backend.** 🎉 
+
+# UC ERA OTP Email Function Setup
+
+## Required Environment Variables
+
+For the OTP email sending function to work properly, you need to configure the following environment variables in your Appwrite function:
+
+### Resend API Configuration
+
+1. **RESEND_API_KEY**: Your Resend API key for sending emails
+   - Get your API key from: https://resend.com/api-keys
+   - This is required for the email sending functionality
+
+### Appwrite Configuration
+
+2. **APPWRITE_FUNCTION_ENDPOINT**: Your Appwrite endpoint (default: https://nyc.cloud.appwrite.io/v1)
+3. **APPWRITE_FUNCTION_PROJECT_ID**: Your Appwrite project ID (default: 688813660017c877f06e)
+4. **APPWRITE_API_KEY**: Your Appwrite API key with proper permissions
+
+## Function Deployment
+
+1. Deploy the `send-otp-email` function to your Appwrite project
+2. Make sure all dependencies are installed:
+   ```bash
+   cd functions/send-otp-email
+   npm install
+   ```
+
+## Email Configuration
+
+The function sends emails from: `UC ERA <noreply@unbreakablecube.com>`
+
+Make sure to:
+- Verify your domain in Resend
+- Configure proper DNS records for email delivery
+- Test the email delivery in your Resend dashboard
+
+## Troubleshooting
+
+- Check Appwrite function logs for detailed error messages
+- Verify that RESEND_API_KEY is properly set
+- Ensure the email domain is verified in Resend
+- Check that the function has proper permissions to access the database 

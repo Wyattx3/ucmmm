@@ -1,10 +1,60 @@
 import { account, databases, functions, DATABASE_ID, COLLECTIONS, ID, Query } from '../lib/appwrite.js';
 
 class AuthService {
+    // Generate unique 7-digit Member ID
+    async generateMemberID() {
+        try {
+            let isUnique = false;
+            let memberID = '';
+            let attempts = 0;
+            const maxAttempts = 10;
+
+            while (!isUnique && attempts < maxAttempts) {
+                // Generate 7-digit number (1000000 to 9999999)
+                memberID = Math.floor(1000000 + Math.random() * 9000000).toString();
+                
+                console.log('🔢 Generated Member ID:', memberID);
+                
+                // Check if this Member ID already exists
+                try {
+                    const existingUsers = await databases.listDocuments(
+                        DATABASE_ID,
+                        COLLECTIONS.USERS,
+                        [Query.equal('memberID', memberID)]
+                    );
+                    
+                    if (existingUsers.documents.length === 0) {
+                        isUnique = true;
+                        console.log('✅ Member ID is unique:', memberID);
+                    } else {
+                        console.log('🔄 Member ID already exists, generating new one...');
+                        attempts++;
+                    }
+                } catch (error) {
+                    console.warn('⚠️ Error checking Member ID uniqueness:', error.message);
+                    // If we can't check, assume it's unique to avoid infinite loop
+                    isUnique = true;
+                }
+            }
+
+            if (!isUnique) {
+                throw new Error('Failed to generate unique Member ID after multiple attempts');
+            }
+
+            return memberID;
+        } catch (error) {
+            console.error('❌ Error generating Member ID:', error);
+            throw new Error('Failed to generate Member ID: ' + error.message);
+        }
+    }
+
     // Register Step 1: Names
     async registerNames(userData) {
         try {
             console.log('📝 Registering names:', userData);
+            
+            // Generate unique Member ID
+            const memberID = await this.generateMemberID();
             
             // Create user document in database
             const userDoc = await databases.createDocument(
@@ -12,6 +62,7 @@ class AuthService {
                 COLLECTIONS.USERS,
                 ID.unique(),
                 {
+                    memberID: memberID,
                     firstName: userData.firstName.trim(),
                     middleName: userData.middleName?.trim() || '',
                     lastName: userData.lastName.trim(),
@@ -22,7 +73,7 @@ class AuthService {
                 }
             );
 
-            console.log('✅ Names registered successfully:', userDoc);
+            console.log('✅ Names registered successfully with Member ID:', userDoc.memberID);
             return {
                 success: true,
                 data: {
@@ -338,7 +389,7 @@ class AuthService {
         try {
             console.log('🏙️ Registering city for user:', userId);
             
-            await databases.updateDocument(
+            const updatedUser = await databases.updateDocument(
                 DATABASE_ID,
                 COLLECTIONS.USERS,
                 userId,
@@ -351,13 +402,14 @@ class AuthService {
                 }
             );
 
-            console.log('✅ Registration completed successfully');
+            console.log('✅ Registration completed successfully for Member ID:', updatedUser.memberID);
             return {
                 success: true,
                 data: {
                     userId: userId,
                     step: 7,
-                    completed: true
+                    completed: true,
+                    message: 'Welcome to UC ERA! Your registration is complete.'
                 }
             };
         } catch (error) {

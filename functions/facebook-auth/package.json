@@ -1,0 +1,12 @@
+{
+  "name": "facebook-auth",
+  "version": "1.0.0",
+  "description": "Facebook authentication handler for UC ERA",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js"
+  },
+  "dependencies": {
+    "node-appwrite": "^13.0.0"
+  }
+}

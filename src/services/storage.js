@@ -1,4 +1,4 @@
-import { storage, ID, Permission, Role, STORAGE_BUCKETS } from '../lib/appwrite.js';
+import { storage, account, ID, Permission, Role, STORAGE_BUCKETS } from '../lib/appwrite.js';
 
 class StorageService {
     // Convert base64 to blob
@@ -28,6 +28,25 @@ class StorageService {
         try {
             console.log('📸 Uploading private photo for user:', userId);
             
+            // Check if we have an active session, create anonymous session if needed
+            let hasSession = false;
+            try {
+                const currentSession = await account.getSession('current');
+                hasSession = !!currentSession;
+                console.log('✅ Existing session found for storage operations');
+            } catch (sessionError) {
+                console.log('ℹ️ No existing session, creating anonymous session for storage...');
+                try {
+                    // Create anonymous session for storage operations
+                    await account.createAnonymousSession();
+                    hasSession = true;
+                    console.log('✅ Anonymous session created for storage operations');
+                } catch (anonError) {
+                    console.warn('⚠️ Could not create anonymous session:', anonError.message);
+                    console.log('📝 Proceeding with storage operation without session...');
+                }
+            }
+            
             // Convert base64 to blob
             const blob = this.base64ToBlob(photoBase64);
             const fileName = `${userId}_private_${Date.now()}.jpg`;
@@ -37,11 +56,7 @@ class StorageService {
             const result = await storage.createFile(
                 STORAGE_BUCKETS.PRIVATE_PHOTOS,
                 ID.unique(),
-                file,
-                [
-                    Permission.read(Role.any()), // Allow any user to read (simplified for now)
-                    Permission.write(Role.any()) // Allow any user to write (simplified for now)
-                ]
+                file
             );
             
             console.log('✅ Private photo uploaded successfully:', result.$id);
@@ -59,10 +74,13 @@ class StorageService {
         }
     }
 
-    // Upload public photo (public read, user write)
+    // Upload public photo (DEPRECATED - NOT USED)
+    // NOTE: Public photos are now stored as base64 in database for member card display
+    // This method is kept for potential future use but is not currently used in the application
     async uploadPublicPhoto(userId, photoBase64) {
         try {
-            console.log('📸 Uploading public photo for user:', userId);
+            console.log('📸 Uploading public photo for user (DEPRECATED):', userId);
+            console.warn('⚠️ uploadPublicPhoto is deprecated - public photos are stored as base64');
             
             // Convert base64 to blob
             const blob = this.base64ToBlob(photoBase64);

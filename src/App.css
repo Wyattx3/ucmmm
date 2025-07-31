@@ -2521,5 +2521,59 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   }
 }
 
+/* Facebook Authentication Screen Styles */
+.facebook-info-card {
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 20px 0;
+}
+
+.info-item {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 16px;
+  gap: 12px;
+}
+
+.info-item:last-child {
+  margin-bottom: 0;
+}
+
+.info-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.info-text h4 {
+  margin: 0 0 4px 0;
+  color: #333;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.info-text p {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.facebook-connect-section {
+  text-align: center;
+  margin-top: 30px;
+}
+
+.facebook-note {
+  margin-top: 16px;
+  color: #666;
+  font-size: 13px;
+  line-height: 1.4;
+  max-width: 280px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 /* Future animations can be added here if needed */
 

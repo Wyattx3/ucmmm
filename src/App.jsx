@@ -3,10 +3,11 @@ import './App.css'
 import { useRegistration } from './hooks/useRegistration'
 import CubeLoader from './components/CubeLoader'
 import MemberCard from './components/MemberCard'
+import FacebookButton from './components/FacebookButton'
 import authService from './services/auth.js'
 
 function App() {
-  const [currentScreen, setCurrentScreen] = useState('welcome') // 'welcome', 'registration', 'dateOfBirth', 'contact', 'verification', 'success', 'passcode', 'passcodeConfirm', 'citizenship', 'city', 'finalSuccess', 'memberCardApplication', 'nameConfirmation', 'relationshipStatus', 'genderSelection', 'favoriteFood', 'favoriteArtist', 'loveLanguage', 'photoUpload', 'existingUserPasscode', 'existingUserLogin'
+  const [currentScreen, setCurrentScreen] = useState('welcome') // 'welcome', 'registration', 'dateOfBirth', 'contact', 'verification', 'success', 'passcode', 'passcodeConfirm', 'citizenship', 'city', 'finalSuccess', 'memberCardApplication', 'nameConfirmation', 'relationshipStatus', 'genderSelection', 'favoriteFood', 'favoriteArtist', 'loveLanguage', 'photoUpload', 'facebookAuth', 'facebookSuccess', 'existingUserPasscode', 'existingUserLogin'
   
   // Use registration hook for real API calls
   const {
@@ -25,6 +26,52 @@ function App() {
     completeMemberCard,
     checkDuplicateContact
   } = useRegistration()
+
+  // Handle Facebook OAuth callback
+  useEffect(() => {
+    const handleFacebookCallback = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const path = window.location.pathname;
+      
+      if (path === '/auth/facebook/success' && currentUserId) {
+        try {
+          showScreenLoading('Facebook ချိတ်ဆက်မှု လုပ်ဆောင်နေပါသည်...');
+          
+          // Get Facebook user data from Appwrite session
+          const session = await authService.getCurrentSession();
+          if (session && session.provider === 'facebook') {
+            const facebookData = {
+              id: session.providerUid,
+              name: session.providerEmail || session.providerUid,
+              email: session.providerEmail
+            };
+            
+            // Process Facebook authentication
+            await authService.handleFacebookCallback(currentUserId, facebookData);
+            
+            hideScreenLoading();
+            setCurrentScreen('facebookSuccess');
+            showNotification('Facebook ချိတ်ဆက်မှု အောင်မြင်ပါပြီ! 🎉', 'success');
+            
+            // Clear URL parameters
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        } catch (error) {
+          hideScreenLoading();
+          console.error('Facebook callback error:', error);
+          showNotification('Facebook ချိတ်ဆက်မှုတွင် အမှားရှိပါသည်', 'error');
+          setCurrentScreen('facebookAuth');
+        }
+      } else if (path === '/auth/facebook/failure') {
+        showNotification('Facebook ချိတ်ဆက်မှု မအောင်မြင်ပါ', 'error');
+        setCurrentScreen('facebookAuth');
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    };
+
+    handleFacebookCallback();
+  }, [currentUserId]);
+
   const [selectedCountry, setSelectedCountry] = useState({
     code: '+95',
     flag: '🇲🇲',
@@ -670,6 +717,19 @@ function App() {
     }))
   }
 
+  // Auto-focus first OTP input when verification screen loads
+  useEffect(() => {
+    if (currentScreen === 'verification') {
+      // Small delay to ensure DOM is ready, then focus first input
+      setTimeout(() => {
+        const firstInput = document.querySelector('#otp-0')
+        if (firstInput) {
+          firstInput.focus()
+        }
+      }, 100)
+    }
+  }, [currentScreen])
+
   // Verification Code Handler
   const handleVerificationCodeChange = (index, value) => {
     // Only allow single digit
@@ -789,15 +849,23 @@ function App() {
       // Clear verification code
       setVerificationCode(['', '', '', '', '', ''])
       
+      // Focus first input after clearing
+      setTimeout(() => {
+        const firstInput = document.querySelector('#otp-0')
+        if (firstInput) {
+          firstInput.focus()
+        }
+      }, 100)
+      
       // Increment resend count
       setResendCount(prev => prev + 1)
       
       // Set cooldown (60 seconds)
       setResendCooldown(60)
       
-      // Send new OTP
-      if (currentUserId && formData.email) {
-        await sendOTPVerification(formData.email)
+      // Send new OTP using stored userId
+      if (formData.userId && formData.email) {
+        await authService.sendOTPVerification(formData.userId, formData.email)
         showNotification(`New verification code sent to ${formData.email}`, 'success')
       } else {
         showNotification('Error: User session not found. Please start registration again.', 'error')
@@ -849,12 +917,18 @@ function App() {
     setLoadingMessage(message)
   }
   
-  const hideScreenLoading = () => {
-    // Add small delay to ensure loading animation is visible
-    setTimeout(() => {
+  const hideScreenLoading = (immediate = false) => {
+    if (immediate) {
+      // Immediate hide for OTP sending to prevent delay
       setScreenLoading(false)
       setLoadingMessage('')
-    }, 1000) // 1 second minimum display time
+    } else {
+      // Add small delay to ensure loading animation is visible for other operations
+      setTimeout(() => {
+        setScreenLoading(false)
+        setLoadingMessage('')
+      }, 1000) // 1 second minimum display time
+    }
   }
 
   const handleNext = async () => {
@@ -901,26 +975,32 @@ function App() {
             // If no duplicates, register all data together (names + date + contact)
             showScreenLoading('အမည်နဲ့ အချက်အလက်များ သိမ်းဆည်းနေပါသည်...')
             
-            // Register names first
-            await registerNames({
+            // Register names first and get userId from result
+            const namesResult = await registerNames({
               firstName: formData.firstName,
               middleName: formData.middleName,
               lastName: formData.lastName
             })
             
+            const userId = namesResult.data.userId
+            console.log('✅ Got userId from registerNames:', userId)
+            
+            // Store userId in formData for later use (resend, etc.)
+            setFormData(prev => ({ ...prev, userId: userId }))
+            
             // Convert DD/MM/YYYY to ISO format for database
             const [day, month, year] = formData.dateOfBirth.split('/')
             const isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
             
-            // Register date of birth
-            await registerDateOfBirth(isoDate)
+            // Register date of birth using direct authService with userId
+            await authService.registerDateOfBirth(userId, isoDate)
             
-            // Register contact
-          await registerContact({
-            email: formData.email,
-            phoneNumber: formData.phoneNumber,
-            countryCode: selectedCountry.code
-          })
+            // Register contact using direct authService with userId
+            await authService.registerContact(userId, {
+              email: formData.email,
+              phoneNumber: formData.phoneNumber,
+              countryCode: selectedCountry.code
+            })
             
             hideScreenLoading()
           
@@ -928,10 +1008,10 @@ function App() {
           setResendCount(0)
           setResendCooldown(0)
           
-            setLoadingMessage('Verification code ပို့နေပါသည်...')
-          // Send OTP automatically
-          await sendOTPVerification(formData.email)
-            hideScreenLoading()
+          setLoadingMessage('Verification code ပို့နေပါသည်...')
+          // Send OTP automatically using direct authService with userId
+          await authService.sendOTPVerification(userId, formData.email)
+          hideScreenLoading(true) // Immediate hide for smooth transition
           setCurrentScreen('verification')
           showNotification(`Verification code sent to ${formData.email}`, 'success')
           } catch (error) {
@@ -972,8 +1052,8 @@ function App() {
         const code = verificationCode.join('')
         if (code.length === 6) {
           showScreenLoading('OTP ကို စိစစ်နေပါသည်...')
-          await verifyOTP(code)
-          hideScreenLoading()
+          await authService.verifyOTP(formData.userId, code)
+          hideScreenLoading(true) // Immediate hide for smooth transition
           setCurrentScreen('success')
         } else {
           showNotification('Please enter the complete 6-digit verification code', 'error')
@@ -993,8 +1073,8 @@ function App() {
         if (confirmCode.length === 6) {
           if (originalCode === confirmCode) {
             showScreenLoading('Passcode ကို setup လုပ်နေပါသည်...')
-            await setupPasscode(originalCode)
-            hideScreenLoading()
+            await authService.setupPasscode(formData.userId, originalCode)
+            hideScreenLoading(true) // Immediate hide for smooth transition
             setCurrentScreen('citizenship')
           } else {
             showNotification('Passcodes do not match. Please try again.', 'error')
@@ -1006,8 +1086,8 @@ function App() {
       } else if (currentScreen === 'citizenship') {
         if (selectedCitizenships.length > 0) {
           showScreenLoading('Citizenship information ကို save လုပ်နေပါသည်...')
-          await registerCitizenship(selectedCitizenships)
-          hideScreenLoading()
+          await authService.registerCitizenship(formData.userId, selectedCitizenships)
+          hideScreenLoading(true) // Immediate hide for smooth transition
           setCurrentScreen('city')
         } else {
           showNotification('Please select at least one citizenship', 'error')
@@ -1015,8 +1095,8 @@ function App() {
       } else if (currentScreen === 'city') {
         if (selectedCity) {
           showScreenLoading('Registration ပြီးဆုံးအောင် လုပ်နေပါသည်...')
-          await registerCity(selectedCity)
-          hideScreenLoading()
+          await authService.registerCity(formData.userId, selectedCity)
+          hideScreenLoading(true) // Immediate hide for smooth transition
           setCurrentScreen('finalSuccess')
         } else {
           showNotification('Please select your living city', 'error')
@@ -1174,7 +1254,7 @@ function App() {
       
       console.log('✅ Member Card completion result:', result)
       
-      hideScreenLoading()
+      hideScreenLoading(true) // Immediate hide for smooth transition
       showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! UC ERA သို့ welcome! ✨', 'success')
       
       // Optional: Reset to welcome or redirect to login
@@ -3100,6 +3180,137 @@ function App() {
             )}
 
             <canvas ref={canvasRef} style={{ display: 'none' }} />
+          </div>
+
+          <div className="form-footer">
+            <button 
+              className="next-button" 
+              onClick={() => {
+                if (!formData.privatePhoto || !formData.publicPhoto) {
+                  showNotification('ဓာတ်ပုံ နှစ်ပုံလုံး ထည့်ပါ', 'error');
+                  return;
+                }
+                setCurrentScreen('facebookAuth');
+              }}
+              disabled={!formData.privatePhoto || !formData.publicPhoto}
+            >
+              <span className="button-text">Next</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Facebook Authentication Screen
+  if (currentScreen === 'facebookAuth') {
+    return (
+      <div className="app">
+        <div className="container">
+          {notification.show && (
+            <div className={`notification ${notification.type}`}>
+              <span className="notification-message">{notification.message}</span>
+              <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          <div className="form-header">
+            <button className="back-button" onClick={() => setCurrentScreen('memberCard')}>
+              ←
+            </button>
+            <span className="help-link">Help</span>
+          </div>
+          
+          <div className="form-content">
+            <div className="welcome-logo">
+              <div className="logo-text">🔗</div>
+            </div>
+            
+            <h2 className="form-title">Facebook ချိတ်ဆက်ပါ</h2>
+            <p className="form-subtitle">
+              Member Card တွေ verify လုပ်ဖို့နဲ့ security အတွက် Facebook account ချိတ်ဆက်ဖို့ လိုအပ်ပါတယ်
+            </p>
+            
+            <div className="facebook-info-card">
+              <div className="info-item">
+                <span className="info-icon">🔒</span>
+                <div className="info-text">
+                  <h4>လုံခြုံရေး</h4>
+                  <p>အကောင့်၏ လုံခြုံရေးကို မြှင့်တင်ပါသည်</p>
+                </div>
+              </div>
+              
+              <div className="info-item">
+                <span className="info-icon">✅</span>
+                <div className="info-text">
+                  <h4>စစ်ဆေးခြင်း</h4>
+                  <p>Member Card တွေကို verify လုပ်ပါသည်</p>
+                </div>
+              </div>
+              
+              <div className="info-item">
+                <span className="info-icon">🎯</span>
+                <div className="info-text">
+                  <h4>မဖြစ်မနေ</h4>
+                  <p>Member Card ရယူဖို့ Facebook လင့်ခ်ဖြစ်မှ ရပါမယ်</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="facebook-connect-section">
+              <FacebookButton 
+                onClick={async () => {
+                  try {
+                    showScreenLoading('Facebook နဲ့ ချိတ်ဆက်နေပါသည်...');
+                    await authService.createFacebookSession();
+                  } catch (error) {
+                    hideScreenLoading();
+                    showNotification(error.message, 'error');
+                  }
+                }}
+              />
+              
+              <p className="facebook-note">
+                Facebook နဲ့ ချိတ်ဆက်လိုက်ရင် UC ERA က သင့်ရဲ့ အခြေခံ profile အချက်အလက်တွေပဲ ရယူမှာပါ
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Facebook Authentication Success Screen
+  if (currentScreen === 'facebookSuccess') {
+    return (
+      <div className="app">
+        <div className="container">
+          {notification.show && (
+            <div className={`notification ${notification.type}`}>
+              <span className="notification-message">{notification.message}</span>
+              <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          <div className="form-content">
+            <div className="welcome-logo">
+              <div className="logo-text">✅</div>
+            </div>
+            
+            <h2 className="form-title">Facebook ချိတ်ဆက်ပြီးပါပြီ!</h2>
+            <p className="form-subtitle">
+              အခု Member Card ကို ပြုလုပ်ဖို့ ရပါပြီ
+            </p>
+            
+            <div className="success-info">
+              <div className="info-item">
+                <span className="info-icon">🎉</span>
+                <div className="info-text">
+                  <h4>အောင်မြင်ပါပြီ</h4>
+                  <p>Facebook account ချိတ်ဆက်မှု အောင်မြင်ပါပြီ</p>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="form-footer">

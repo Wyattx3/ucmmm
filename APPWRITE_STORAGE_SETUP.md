@@ -15,11 +15,13 @@ Compression: Automatic
 Antivirus: Enabled
 ```
 
-**Permissions:**
+**Permissions (Production Setup):**
 - Read: `user:USER_ID` (Only owner can read)
-- Create: `user:USER_ID` (Only owner can upload)
+- Create: `any()` (Allow anonymous uploads during registration)
 - Update: `user:USER_ID` (Only owner can update)
 - Delete: `user:USER_ID` (Only owner can delete)
+
+**Note:** Create permission set to `any()` to allow member card photo uploads during registration process when user session may not be established yet.
 
 #### 2. Public Photos Bucket
 ```bash

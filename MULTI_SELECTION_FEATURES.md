@@ -50,9 +50,23 @@ const [formData, setFormData] = useState({
 })
 ```
 
-### Database Storage
+### Data Flow and Storage
 ```javascript
-// Stored as comma-separated strings in Appwrite
+// Frontend State: Arrays
+formData.favoriteFood = ["မုန့်ဟင်းခါး", "လက်ဖက်သုပ်", "ရှမ်းခေါက်ဆွဲ"]
+formData.favoriteArtist = ["စိုင်းထီးဆိုင်", "မင်းဦး", "ခိုင်ထူး"]
+
+// Frontend → Backend: Conversion to comma-separated strings
+memberCardData = {
+  favoriteFood: Array.isArray(formData.favoriteFood) 
+    ? formData.favoriteFood.join(', ') 
+    : formData.favoriteFood,
+  favoriteArtist: Array.isArray(formData.favoriteArtist) 
+    ? formData.favoriteArtist.join(', ') 
+    : formData.favoriteArtist
+}
+
+// Database Storage: Comma-separated strings
 {
   favoriteFood: "မုန့်ဟင်းခါး, လက်ဖက်သုပ်, ရှမ်းခေါက်ဆွဲ",
   favoriteArtist: "စိုင်းထီးဆိုင်, မင်းဦး, ခိုင်ထူး"

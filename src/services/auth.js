@@ -128,7 +128,7 @@ class AuthService {
             const emailLower = contactData.email.toLowerCase();
             const fullPhoneNumber = `${contactData.countryCode}${contactData.phoneNumber.replace(/\D/g, '')}`;
             
-            // Check for duplicate email
+            // Check for duplicate email (only verified accounts)
             console.log('🔍 Checking for duplicate email:', emailLower);
             try {
                 const existingEmailUsers = await databases.listDocuments(
@@ -136,19 +136,22 @@ class AuthService {
                     COLLECTIONS.USERS,
                     [
                         Query.equal('email', emailLower),
+                        Query.equal('emailVerified', true), // Only check verified accounts
                         Query.notEqual('$id', userId) // Exclude current user
                     ]
                 );
                 
                 if (existingEmailUsers.documents.length > 0) {
                     const existingUser = existingEmailUsers.documents[0];
+                    console.log('📧 Found existing VERIFIED user with email:', emailLower);
                     // Return existing user info instead of throwing generic error
                     throw new Error(JSON.stringify({
                         type: 'EXISTING_USER',
                         userId: existingUser.$id,
                         email: existingUser.email,
                         hasMemberCard: existingUser.hasMemberCard || false,
-                        isEmailDuplicate: true
+                        isEmailDuplicate: true,
+                        emailVerified: existingUser.emailVerified
                     }));
                 }
             } catch (queryError) {
@@ -158,7 +161,7 @@ class AuthService {
                 console.warn('⚠️ Could not check email duplicates:', queryError.message);
             }
             
-            // Check for duplicate phone number
+            // Check for duplicate phone number (only verified accounts)
             console.log('🔍 Checking for duplicate phone number:', fullPhoneNumber);
             try {
                 const existingPhoneUsers = await databases.listDocuments(
@@ -167,19 +170,22 @@ class AuthService {
                     [
                         Query.equal('phoneNumber', contactData.phoneNumber.replace(/\D/g, '')),
                         Query.equal('countryCode', contactData.countryCode || '+95'),
+                        Query.equal('emailVerified', true), // Only check verified accounts
                         Query.notEqual('$id', userId) // Exclude current user
                     ]
                 );
                 
                 if (existingPhoneUsers.documents.length > 0) {
                     const existingUser = existingPhoneUsers.documents[0];
+                    console.log('📱 Found existing VERIFIED user with phone:', fullPhoneNumber);
                     // Return existing user info instead of throwing generic error
                     throw new Error(JSON.stringify({
                         type: 'EXISTING_USER',
                         userId: existingUser.$id,
                         phoneNumber: existingUser.phoneNumber,
                         hasMemberCard: existingUser.hasMemberCard || false,
-                        isPhoneDuplicate: true
+                        isPhoneDuplicate: true,
+                        emailVerified: existingUser.emailVerified
                     }));
                 }
             } catch (queryError) {
@@ -502,12 +508,12 @@ class AuthService {
             console.log('🎴 Completing member card for user:', userId);
             console.log('🎴 Member card data received:', memberCardData);
             
-            // Upload photos to Appwrite Storage
+            // Handle photo storage - Private photo to cloud storage, Public photo as base64
             let privatePhotoData = null;
-            let publicPhotoData = null;
+            let compressedPublicPhoto = null;
             
             if (memberCardData.privatePhoto) {
-                console.log('📸 Processing private photo...');
+                console.log('📸 Processing private photo for cloud storage...');
                 const compressedPrivate = await storageService.processPhotoForUpload(
                     memberCardData.privatePhoto, 
                     512, // 512KB max
@@ -517,39 +523,50 @@ class AuthService {
             }
             
             if (memberCardData.publicPhoto) {
-                console.log('📸 Processing public photo...');
-                const compressedPublic = await storageService.processPhotoForUpload(
+                console.log('📸 Processing public photo for base64 storage...');
+                // Compress public photo but don't upload to cloud storage
+                compressedPublicPhoto = await storageService.processPhotoForUpload(
                     memberCardData.publicPhoto,
                     1024, // 1MB max  
-                    0.9   // 90% quality (higher quality for member card)
+                    0.9   // 90% quality (higher quality for member card display)
                 );
-                publicPhotoData = await storageService.uploadPublicPhoto(userId, compressedPublic);
+                console.log('📸 Public photo compressed for database storage');
             }
             
-            // Update user with member card data and mark as completed
+            // Process and validate member card data before database update
+            // Note: Frontend already converts arrays to comma-separated strings before sending
             const updateData = {
                 relationshipStatus: memberCardData.relationshipStatus,
                 gender: memberCardData.gender,
-                favoriteFood: memberCardData.favoriteFood,
-                favoriteArtist: memberCardData.favoriteArtist,
+                // Frontend sends comma-separated strings, validate and store as-is
+                favoriteFood: memberCardData.favoriteFood || '',
+                favoriteArtist: memberCardData.favoriteArtist || '',
                 loveLanguage: memberCardData.loveLanguage,
                 hasMemberCard: true,
                 memberCardCompletedAt: new Date().toISOString()
             };
 
-            // Add photo data if uploaded successfully
+            console.log('📝 Member card data validation:', {
+                favoriteFood: `${typeof updateData.favoriteFood} - "${updateData.favoriteFood}"`,
+                favoriteArtist: `${typeof updateData.favoriteArtist} - "${updateData.favoriteArtist}"`,
+                relationshipStatus: updateData.relationshipStatus,
+                gender: updateData.gender,
+                loveLanguage: updateData.loveLanguage
+            });
+
+            // Add photo data based on storage strategy
             if (privatePhotoData) {
+                // Private photo stored in cloud storage
                 updateData.privatePhotoId = privatePhotoData.fileId;
                 updateData.privatePhotoUrl = privatePhotoData.url;
                 updateData.privatePhotoSize = privatePhotoData.size;
-                console.log('📸 Private photo data added to update:', privatePhotoData);
+                console.log('📸 Private photo cloud storage data added:', privatePhotoData);
             }
             
-            if (publicPhotoData) {
-                updateData.publicPhotoId = publicPhotoData.fileId;
-                updateData.publicPhotoUrl = publicPhotoData.url;
-                updateData.publicPhotoSize = publicPhotoData.size;
-                console.log('📸 Public photo data added to update:', publicPhotoData);
+            if (compressedPublicPhoto) {
+                // Public photo stored as base64 in database for member card display
+                updateData.publicPhoto = compressedPublicPhoto;
+                console.log('📸 Public photo base64 data added for member card display');
             }
 
             // Include name updates if provided (for existing users who edited names)
@@ -591,46 +608,52 @@ class AuthService {
             const emailLower = contactData.email.toLowerCase();
             const cleanPhone = contactData.phoneNumber.replace(/\D/g, '');
             
-            // Check for duplicate email
+            // Check for duplicate email (only verified accounts)
             const existingEmailUsers = await databases.listDocuments(
                 DATABASE_ID,
                 COLLECTIONS.USERS,
-                [Query.equal('email', emailLower)]
+                [
+                    Query.equal('email', emailLower),
+                    Query.equal('emailVerified', true) // Only check verified accounts
+                ]
             );
             
             if (existingEmailUsers.documents.length > 0) {
                 const existingUser = existingEmailUsers.documents[0];
-                console.log('📧 Found existing user with email:', emailLower);
+                console.log('📧 Found existing VERIFIED user with email:', emailLower);
                 // Return existing user info instead of throwing generic error
                 throw new Error(JSON.stringify({
                     type: 'EXISTING_USER',
                     userId: existingUser.$id,
                     email: existingUser.email,
                     hasMemberCard: existingUser.hasMemberCard || false,
-                    isEmailDuplicate: true
+                    isEmailDuplicate: true,
+                    emailVerified: existingUser.emailVerified
                 }));
             }
             
-            // Check for duplicate phone number
+            // Check for duplicate phone number (only verified accounts)
             const existingPhoneUsers = await databases.listDocuments(
                 DATABASE_ID,
                 COLLECTIONS.USERS,
                 [
                     Query.equal('phoneNumber', cleanPhone),
-                    Query.equal('countryCode', contactData.countryCode || '+95')
+                    Query.equal('countryCode', contactData.countryCode || '+95'),
+                    Query.equal('emailVerified', true) // Only check verified accounts
                 ]
             );
             
             if (existingPhoneUsers.documents.length > 0) {
                 const existingUser = existingPhoneUsers.documents[0];
-                console.log('📱 Found existing user with phone:', cleanPhone);
+                console.log('📱 Found existing VERIFIED user with phone:', cleanPhone);
                 // Return existing user info instead of throwing generic error
                 throw new Error(JSON.stringify({
                     type: 'EXISTING_USER',
                     userId: existingUser.$id,
                     phoneNumber: existingUser.phoneNumber,
                     hasMemberCard: existingUser.hasMemberCard || false,
-                    isPhoneDuplicate: true
+                    isPhoneDuplicate: true,
+                    emailVerified: existingUser.emailVerified
                 }));
             }
             
@@ -723,6 +746,90 @@ class AuthService {
             fullName += ' ' + userData.lastName.trim();
         }
         return fullName;
+    }
+
+    // Facebook Authentication Methods
+    async createFacebookSession() {
+        try {
+            console.log('🔗 Creating Facebook OAuth session...');
+            
+            const successUrl = `${window.location.origin}/auth/facebook/success`;
+            const failureUrl = `${window.location.origin}/auth/facebook/failure`;
+            
+            // Create OAuth2 session with Facebook
+            account.createOAuth2Session(
+                'facebook',
+                successUrl,
+                failureUrl
+            );
+            
+        } catch (error) {
+            console.error('❌ Facebook OAuth error:', error);
+            throw new Error('Facebook လင့်ခ်ချိတ်ရာတွင် အမှားရှိပါသည်: ' + error.message);
+        }
+    }
+
+    async handleFacebookCallback(userId, facebookData) {
+        try {
+            console.log('🔗 Processing Facebook callback for user:', userId);
+            
+            // Call cloud function to process Facebook authentication
+            const result = await functions.createExecution(
+                'facebook-auth',
+                JSON.stringify({
+                    userId: userId,
+                    facebookData: facebookData
+                })
+            );
+
+            console.log('📊 Facebook auth function result:', result);
+            
+            if (result.responseStatusCode === 200) {
+                const response = JSON.parse(result.responseBody);
+                if (response.success) {
+                    return response;
+                } else {
+                    throw new Error(response.message || 'Facebook authentication failed');
+                }
+            } else {
+                throw new Error('Facebook authentication service error');
+            }
+            
+        } catch (error) {
+            console.error('❌ Facebook callback error:', error);
+            throw new Error('Facebook လင့်ခ်ချိတ်ရာတွင် အမှားရှိပါသည်: ' + error.message);
+        }
+    }
+
+    async checkFacebookConnection(userId) {
+        try {
+            console.log('🔍 Checking Facebook connection for user:', userId);
+            
+            const user = await databases.getDocument(
+                DATABASE_ID,
+                COLLECTIONS.USERS,
+                userId
+            );
+            
+            return {
+                connected: user.facebookConnected || false,
+                facebookName: user.facebookName || null,
+                facebookId: user.facebookId || null
+            };
+            
+        } catch (error) {
+            console.error('❌ Error checking Facebook connection:', error);
+            return { connected: false, facebookName: null, facebookId: null };
+        }
+    }
+
+    async getCurrentSession() {
+        try {
+            return await account.getSession('current');
+        } catch (error) {
+            console.log('No active session found');
+            return null;
+        }
     }
 }
 

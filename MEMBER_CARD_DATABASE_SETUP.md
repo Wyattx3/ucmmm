@@ -34,13 +34,14 @@ Values: words_of_affirmation, acts_of_service, receiving_gifts, quality_time, ph
 
 ### 3. Photo Storage Fields:
 ```
-privatePhotoId: String (optional, 100 chars)
-privatePhotoUrl: String (optional, 500 chars)  
-privatePhotoSize: Integer (optional)
+// Private Photo (Stored in Appwrite Cloud Storage)
+privatePhotoId: String (optional, 100 chars)    // Cloud storage file ID
+privatePhotoUrl: String (optional, 500 chars)   // Cloud storage URL
+privatePhotoSize: Integer (optional)            // File size in bytes
 
-publicPhotoId: String (optional, 100 chars)
-publicPhotoUrl: String (optional, 500 chars)
-publicPhotoSize: Integer (optional)
+// Public Photo (Stored as Base64 in Database)
+publicPhoto: String (optional, 500000 chars)    // Base64 string for member card display
+Note: Public photos are NOT stored in cloud storage, only as base64 for member card display
 ```
 
 ## 🧹 Database Cleanup Required

@@ -63,27 +63,28 @@ Frontend → Upload to Appwrite Storage → Get File URL → Store URL in Databa
 
 ### 📁 Storage Structure:
 ```
-Buckets:
+Appwrite Cloud Storage:
 ├── private-photos/
-│   ├── user_123_private.jpg
+│   ├── user_123_private.jpg     // Private photos for verification
 │   └── user_456_private.jpg
-└── public-photos/
-    ├── user_123_public.jpg (2:3 ratio)
-    └── user_456_public.jpg (2:3 ratio)
+
+Database (Base64):
+├── publicPhoto: "data:image/jpeg;base64,..."    // Public photos for member card display
+└── publicPhoto: "data:image/jpeg;base64,..."    // Direct base64 storage (no cloud storage)
 ```
 
 ### 📝 Updated Database Schema:
 ```json
 {
-  // Photo Storage (File References)
+  // Private Photo (Cloud Storage References)
   "privatePhotoId": "file_unique_id",
   "privatePhotoUrl": "https://appwrite.io/storage/files/private.jpg",
-  "publicPhotoId": "file_unique_id", 
-  "publicPhotoUrl": "https://appwrite.io/storage/files/public.jpg",
+  "privatePhotoSize": 524288,    // bytes
+  
+  // Public Photo (Base64 Storage for Member Card)
+  "publicPhoto": "data:image/jpeg;base64,/9j/4AAQSkZJRgABA...",  // Direct base64 string
   
   // Optional: Metadata
-  "privatePhotoSize": 524288,    // bytes
-  "publicPhotoSize": 345432,     // bytes
   "photoUploadedAt": "datetime"
 }
 ```

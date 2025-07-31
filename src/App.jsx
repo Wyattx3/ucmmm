@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
 import { useRegistration } from './hooks/useRegistration'
+import CubeLoader from './components/CubeLoader'
+import MemberCard from './components/MemberCard'
+import authService from './services/auth.js'
 
 function App() {
-  const [currentScreen, setCurrentScreen] = useState('welcome') // 'welcome', 'registration', 'dateOfBirth', 'contact', 'verification', 'success', 'passcode', 'passcodeConfirm', 'citizenship', 'city', 'finalSuccess', 'home', 'memberCardApplication'
+  const [currentScreen, setCurrentScreen] = useState('welcome') // 'welcome', 'registration', 'dateOfBirth', 'contact', 'verification', 'success', 'passcode', 'passcodeConfirm', 'citizenship', 'city', 'finalSuccess', 'memberCardApplication', 'nameConfirmation', 'relationshipStatus', 'genderSelection', 'favoriteFood', 'favoriteArtist', 'loveLanguage', 'photoUpload', 'existingUserPasscode', 'existingUserLogin'
   
   // Use registration hook for real API calls
   const {
@@ -18,7 +21,9 @@ function App() {
     setupPasscode,
     registerCitizenship,
     registerCity,
-    setError: setApiError
+    setError: setApiError,
+    completeMemberCard,
+    checkDuplicateContact
   } = useRegistration()
   const [selectedCountry, setSelectedCountry] = useState({
     code: '+95',
@@ -43,8 +48,274 @@ function App() {
     lastName: '',
     dateOfBirth: '',
     email: '',
-    phoneNumber: ''
+    phoneNumber: '',
+    relationshipStatus: '', // Added relationshipStatus
+    favoriteFood: [], // Changed to array for multiple selection
+    favoriteArtist: [], // Changed to array for multiple selection
+    privatePhoto: null, // Private photo for personal verification
+    publicPhoto: null // Public photo for member card display (2:3 ratio)
   })
+  const [screenLoading, setScreenLoading] = useState(false)
+  const [loadingMessage, setLoadingMessage] = useState('')
+  const [passcodeError, setPasscodeError] = useState(false)
+  const [editingNames, setEditingNames] = useState(false)
+  const [tempFormData, setTempFormData] = useState({})
+  const [customFood, setCustomFood] = useState('')
+  const [customArtist, setCustomArtist] = useState('')
+  const [cropData, setCropData] = useState({ x: 0, y: 0, width: 200, height: 300 })
+  const [showCropper, setShowCropper] = useState(false)
+  const [originalImage, setOriginalImage] = useState(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [isResizing, setIsResizing] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 })
+  const [imageDisplaySize, setImageDisplaySize] = useState({ width: 0, height: 0 })
+  const passcodeInputRefs = useRef([])
+  const canvasRef = useRef(null)
+
+  // Interactive Crop Effect (MUST be at top level for React Rules of Hooks)
+  useEffect(() => {
+    // Only run if we're on photoUpload screen and actively dragging/resizing
+    if (currentScreen !== 'photoUpload' || (!isDragging && !isResizing)) {
+      return
+    }
+
+    console.log('🎯 Setting up move handlers:', { isDragging, isResizing })
+
+    const handleMove = (e) => {
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY
+      
+      if (isDragging) {
+        console.log('↔️ Dragging...', { clientX, clientY, dragStart })
+        const newX = clientX - dragStart.x
+        const newY = clientY - dragStart.y
+        
+        // Constrain to image bounds
+        const maxX = imageDisplaySize.width - cropData.width
+        const maxY = imageDisplaySize.height - cropData.height
+        
+        const constrainedX = Math.max(0, Math.min(newX, maxX))
+        const constrainedY = Math.max(0, Math.min(newY, maxY))
+        
+        console.log('📍 New position:', { newX, newY, constrainedX, constrainedY, bounds: { maxX, maxY } })
+        
+        setCropData(prev => ({
+          ...prev,
+          x: constrainedX,
+          y: constrainedY
+        }))
+      }
+      
+      if (isResizing) {
+        console.log('🔍 Resizing...', { clientX, clientY, resizeStart, corner: isResizing })
+        const deltaX = clientX - resizeStart.mouseX
+        const deltaY = clientY - resizeStart.mouseY
+        
+        let newWidth = resizeStart.width
+        let newHeight = resizeStart.height
+        let newX = cropData.x
+        let newY = cropData.y
+        
+        console.log('📏 Deltas:', { deltaX, deltaY })
+        
+        // Calculate new dimensions while maintaining 2:3 ratio
+        if (isResizing.includes('right')) {
+          newWidth = resizeStart.width + deltaX
+        } else if (isResizing.includes('left')) {
+          newWidth = resizeStart.width - deltaX
+          newX = resizeStart.x - deltaX // Use resizeStart position reference
+        }
+        
+        if (isResizing.includes('bottom')) {
+          // For bottom edges, use deltaY to determine width change (maintain ratio)
+          const heightChange = deltaY
+          const widthChange = heightChange * (2/3) // width = height * ratio
+          newWidth = resizeStart.width + widthChange
+        } else if (isResizing.includes('top')) {
+          // For top edges, use deltaY to determine width change (maintain ratio)
+          const heightChange = -deltaY // Negative because top moves opposite to mouse
+          const widthChange = heightChange * (2/3)
+          newWidth = resizeStart.width + widthChange
+          // Don't adjust Y here, do it after width/height calculation
+        }
+        
+        // Maintain 2:3 ratio (width:height = 2:3)
+        newHeight = newWidth / (2/3)
+        
+        // Adjust position for top edges after calculating new dimensions
+        if (isResizing.includes('top')) {
+          newY = resizeStart.y - (newHeight - resizeStart.height)
+        }
+        if (isResizing.includes('left')) {
+          newX = resizeStart.x - (newWidth - resizeStart.width)
+        }
+        
+        console.log('📐 Before constraints:', { newWidth, newHeight, newX, newY })
+        
+        // Constrain to image bounds
+        const minSize = 50
+        const maxWidth = imageDisplaySize.width
+        const maxHeight = imageDisplaySize.height
+        
+        // Apply size constraints
+        newWidth = Math.max(minSize, Math.min(newWidth, maxWidth))
+        newHeight = newWidth / (2/3)
+        
+        // Ensure height doesn't exceed image bounds
+        if (newHeight > maxHeight) {
+          newHeight = maxHeight
+          newWidth = newHeight * (2/3)
+        }
+        
+        // Adjust position if size changed due to constraints
+        newX = Math.max(0, Math.min(newX, imageDisplaySize.width - newWidth))
+        newY = Math.max(0, Math.min(newY, imageDisplaySize.height - newHeight))
+        
+        console.log('✅ Final dimensions:', { newWidth, newHeight, newX, newY })
+        
+        setCropData({
+          x: newX,
+          y: newY,
+          width: newWidth,
+          height: newHeight
+        })
+      }
+    }
+
+    const handleEnd = () => {
+      console.log('🏁 Drag/resize ended')
+      setIsDragging(false)
+      setIsResizing(false)
+    }
+
+    document.addEventListener('mousemove', handleMove)
+    document.addEventListener('mouseup', handleEnd)
+    document.addEventListener('touchmove', handleMove)
+    document.addEventListener('touchend', handleEnd)
+    
+    return () => {
+      document.removeEventListener('mousemove', handleMove)
+      document.removeEventListener('mouseup', handleEnd)
+      document.removeEventListener('touchmove', handleMove)
+      document.removeEventListener('touchend', handleEnd)
+    }
+  }, [currentScreen, isDragging, isResizing, dragStart, resizeStart, cropData, imageDisplaySize])
+
+  // Interactive Crop Handlers (Moved to top level for proper scope)
+  const handleCropMouseDown = (e) => {
+    console.log('🖱️ Mouse down on crop area!', e.target.className)
+    if (e.target.classList.contains('crop-resize-handle')) {
+      console.log('🚫 Clicked on resize handle, ignoring drag')
+      return
+    }
+    
+    console.log('✅ Starting drag operation')
+    e.preventDefault()
+    setIsDragging(true)
+    setDragStart({
+      x: e.clientX - cropData.x,
+      y: e.clientY - cropData.y
+    })
+    console.log('📍 Drag start set:', { x: e.clientX - cropData.x, y: e.clientY - cropData.y })
+  }
+
+  const handleCropTouchStart = (e) => {
+    if (e.target.classList.contains('crop-resize-handle')) return
+    
+    e.preventDefault()
+    setIsDragging(true)
+    const touch = e.touches[0]
+    setDragStart({
+      x: touch.clientX - cropData.x,
+      y: touch.clientY - cropData.y
+    })
+  }
+
+  const handleResizeStart = (e, corner) => {
+    console.log('🔍 Resize start on corner:', corner)
+    e.preventDefault()
+    e.stopPropagation()
+    setIsResizing(corner)
+    
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY
+    
+    setResizeStart({
+      x: cropData.x, // Use crop position, not mouse position
+      y: cropData.y, // Use crop position, not mouse position
+      mouseX: clientX, // Store mouse position separately
+      mouseY: clientY, // Store mouse position separately
+      width: cropData.width,
+      height: cropData.height
+    })
+    console.log('📐 Resize start set:', { corner, x: clientX, y: clientY, width: cropData.width, height: cropData.height })
+  }
+
+  const handleCropComplete = () => {
+    if (!originalImage) return
+
+    // Create a temporary canvas for cropping
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    const img = new Image()
+    
+    img.onload = () => {
+      // Set canvas size to 2:3 ratio (fixed dimensions)
+      const outputWidth = 200
+      const outputHeight = 300
+      canvas.width = outputWidth
+      canvas.height = outputHeight
+      
+      // Get the image element for actual display dimensions
+      const displayImg = document.querySelector('.crop-image')
+      if (!displayImg) return
+      
+      // Calculate scale factors between display and natural image
+      const scaleX = img.naturalWidth / displayImg.offsetWidth
+      const scaleY = img.naturalHeight / displayImg.offsetHeight
+      
+      // Apply scaling to crop coordinates
+      const sourceX = cropData.x * scaleX
+      const sourceY = cropData.y * scaleY
+      const sourceWidth = cropData.width * scaleX
+      const sourceHeight = cropData.height * scaleY
+      
+      console.log('🎯 Crop Debug:', {
+        natural: { width: img.naturalWidth, height: img.naturalHeight },
+        display: { width: displayImg.offsetWidth, height: displayImg.offsetHeight },
+        scale: { x: scaleX, y: scaleY },
+        crop: { x: sourceX, y: sourceY, width: sourceWidth, height: sourceHeight },
+        output: { width: outputWidth, height: outputHeight }
+      })
+      
+      // Draw the cropped image
+      ctx.drawImage(
+        img,
+        sourceX,      // Source X
+        sourceY,      // Source Y  
+        sourceWidth,  // Source Width
+        sourceHeight, // Source Height
+        0,            // Destination X
+        0,            // Destination Y
+        outputWidth,  // Destination Width
+        outputHeight  // Destination Height
+      )
+      
+      const croppedImage = canvas.toDataURL('image/jpeg', 0.9)
+      setFormData({...formData, publicPhoto: croppedImage})
+      setShowCropper(false)
+      setOriginalImage(null)
+      setCropData({ x: 0, y: 0, width: 200, height: 300 }) // Reset crop data
+      
+      // Reset interaction states
+      setIsDragging(false)
+      setIsResizing(false)
+      setImageDisplaySize({ width: 0, height: 0 })
+    }
+    
+    img.src = originalImage
+  }
 
   const countries = [
     { code: '+95', flag: '🇲🇲', name: 'Myanmar', format: 'xxx xxx xxxx' },
@@ -97,6 +368,45 @@ function App() {
     'Other City'
   ]
 
+  const myanmarFoods = [
+    'မုန့်ဟင်းခါး', 'အုန်းနို့ခေါက်ဆွဲ', 'အကြော်စုံ', 'ထမင်းသုပ်', 'ငါးဖယ်လုံးမုန့်ဟင်းခါး',
+    'ရှမ်းခေါက်ဆွဲ', 'နန်းကြီးသုပ်', 'မုန့်တီ', 'တို့ဟူးနွေး', 'မုံဖယ်', 'ခေါက်ဆွဲ', 'အုန်းထမင်း',
+    'ဆီထမင်း', 'ဂျုံမုန့်လုံးကြော်', 'မုန့်လုံးရေပေါ်', 'ဆန်ပြုတ်', 'လက်ဖက်သုပ်', 'အသားကြီးသုပ်',
+    'ကြက်ဥသုပ်', 'ခရမ်းချဉ်သီးသုပ်', 'ပဲကြီးသုပ်', 'ပဲပြုတ်သုပ်', 'ခေါက်ဆွဲသုပ်', 'မြှီးရှည်',
+    'ငါးဖယ်သုပ်', 'မြိတ်ကတ်ကြေးကိုက်', 'မုန့်လက်ဆောင်း', 'ကြာဇံသုပ်', 'ရှမ်းတို့ဟူးသုပ်',
+    'ကြက်သားဟင်း', 'ဝက်သားဟင်း', 'အမဲသားဟင်း', 'ငါးဆီပြန်ဟင်း', 'ပုစွန်ဆီပြန်ဟင်း',
+    'ချဉ်စပ်ဟင်း', 'ပဲဟင်း', 'ဟင်းချို', 'ဆိတ်သားဟင်း', 'ငါးပေါင်း', 'ဟင်းနုနွယ်ဟင်း',
+    'ပဲကုလားဟင်း', 'ဂျူးမြစ်ဟင်း', 'ရွှေရင်အေး', 'ဆနွင်းမကင်း', 'ဘိန်းမုန့်', 'မုန့်ပြားသလပ်',
+    'သရက်သီးထမင်းချို', 'ထန်းလျက်', 'မုန့်ဖတ်ဆီ', 'ဒိန်ခဲ', 'ကောက်ညှင်းပေါင်း', 'ပဲဆုပ်',
+    'ပဲကြော်', 'ဘူးသီးကြော်', 'ဖရုံသီးကြော်', 'အာလူးချောင်းကြော်', 'ငါးခြောက်ကြော်',
+    'ပုစွန်ခြောက်ကြော်', 'ငါးပိရည်', 'ငါးပိထောင်း', 'တို့စရာမျိုးစုံ', 'ချဉ်ပေါင်ကြော်',
+    'ကန်စွန်းရွက်ကြော်', 'မုန်လာဥချဉ်', 'သရက်သီးချဉ်', 'ဇီးသီးချဉ်', 'မန်ကျည်းသီးချဉ်',
+    'ပဲလှော်', 'ကန်စွန်းဥပြုတ်', 'ပြောင်းဖူးပြုတ်', 'မြေပဲပြုတ်', 'ပြောင်းဖူးကင်',
+    'အသားကင်မျိုးစုံ', 'ကြက်ကင်', 'ဝက်ကင်', 'ငါးကင်', 'ထမင်းပေါင်း', 'ခေါက်ဆွဲပေါင်း',
+    'ကြက်သွန်ဖြူဆီချက်', 'မြေပဲဆီချက်', 'ငါးခြောက်ထောင်း', 'ငါးပိကြော်', 'ရခိုင်မုန့်တီ',
+    'မွန်မုန့်ဟင်းခါး', 'ကရင်ခေါက်ဆွဲ', 'ရှမ်းထမင်းချဉ်', 'တီးတိန်ခေါက်ဆွဲ', 'လက်ခမန်း',
+    'ခေါက်ဆွဲကြော်', 'ကြေးအိုး', 'ကြေးအိုးဆီချက်', 'အကြော်စုံသုပ်', 'ထမင်းဆီဆမ်း',
+    'အသီးစုံယို', 'ကော်ရည်', 'ခေါပုတ်', 'ငါးပတ်', 'ဝက်သားနှပ်', 'ဆိတ်သားနှပ်', 'Others'
+  ]
+
+  const myanmarArtists = [
+    'စိုင်းထီးဆိုင်', 'မင်းဦး', 'ခိုင်ထူး', 'ကိုင်ဇာ', 'ထူးအိမ်သင်', 'ဇော်ဝင်းထွဋ်', 'မျိုးကြီး',
+    'Raymond', 'R Zarni', 'L ဆိုင်းဇီ', 'စိုးသူ', 'ဖြိုးကြီး', 'R ဂျေ', 'မို့မို့ဇော်ဝင်း',
+    'မီမီဝင်းဖေ', 'တင်ဇာမော်', 'ခင်မြတ်မွန်', 'ချမ်းချမ်း', 'နီနီခင်ဇော်', 'ဝိုင်းစုခိုင်သိန်း',
+    'အိမ့်ချစ်', 'လွှမ်းပိုင်', 'ကျားပေါက်', 'စောလားထော်ဝါး', 'အောင်လ', 'လေးဖြူ', 'အငဲ',
+    'ကော်နီ', 'မာမာအေး', 'ခင်မောင်တိုး', 'စံလင်း', 'ဂျီလတ်', 'ဝိုင်ဝိုင်း', 'ရဲလေး',
+    'ဘန်နီဖြိုး', 'G Fatt', 'X-Box', 'နောနော်', 'စိုင်းစိုင်းခမ်းလှိုင်', 'Bobby Soxer', 'နီတာ',
+    'အေးမြတ်သူ', 'ငယ်ငယ်', 'သအို', 'ယုန်လေး', 'စန္ဒီမြင့်လွင်', 'စိုးမြတ်သူဇာ (အဆိုတော်ဘက်)',
+    'မေခလာ', 'ရတနာဦး', 'အေးချမ်းမေ', 'ကျော်ဆွေ', 'ရာဇာ', 'ထွန်းဝေ', 'မြင့်အောင်',
+    'ကောလိပ်ဂျင်နေဝင်း', 'ရဲအောင်', 'ညွန့်ဝင်း', 'ကျော်သူ', 'လွင်မိုး', 'လူမင်း', 'နေတိုး',
+    'ပြေတီဦး', 'အောင်ရဲလင်း', 'နေမင်း', 'ဇေရဲထက်', 'ခန့်စည်သူ', 'ဒွေး', 'မင်းမော်ကွန်း',
+    'မြင့်မြတ်', 'စိုးမြတ်သူဇာ', 'မို့မို့မြင့်အောင်', 'ခင်သန်းနု', 'ချိုပြုံး', 'ပိုးမီ',
+    'မေသန်းနု', 'အိန္ဒြာကျော်ဇင်', 'မိုးဒီ', 'မိုးဟေကို', 'သက်မွန်မြင့်', 'ခင်ဝင့်ဝါ',
+    'ရွှေမှုန်ရတီ', 'စိုးပြည့်သဇင်', 'ပိုင်တံခွန်', 'နိုင်းနိုင်း', 'သူရိယ', 'ထွန်းထွန်း',
+    'မိုးယံဇွန်', 'မေကဗျာ', 'တင်ဇာဝင်းကျော်', 'ပန်းဖြူ', 'ဝါဝါအောင်', 'ခင်ဇာခြည်ကျော်',
+    'မင်းအုပ်စိုး', 'ညီထွဋ်ခေါင်', 'မေသဉ္ဇာဦး', 'Others'
+  ]
+
   // Show notification function
   const showNotification = (message, type = 'error') => {
     setNotification({ show: true, message, type })
@@ -112,10 +422,27 @@ function App() {
     }
   }, [notification.show])
 
-  // Show API errors as notifications
+  // Show API errors as notifications with user-friendly messages
   useEffect(() => {
     if (apiError) {
-      showNotification(apiError, 'error')
+      // Parse JSON error messages for EXISTING_USER type
+      let userFriendlyMessage = apiError
+      
+      try {
+        const errorObj = JSON.parse(apiError)
+        if (errorObj.type === 'EXISTING_USER') {
+          if (errorObj.hasMemberCard) {
+            userFriendlyMessage = '🔐 ဒီအီးမေးလ်/ဖုန်းနံပါတ်နဲ့ Member Card ရှိပြီးသား အကောင့်ရှိပါသည်။ Login လုပ်ပါ။'
+          } else {
+            userFriendlyMessage = '📱 ဒီအီးမေးလ်/ဖုန်းနံပါတ်နဲ့ အကောင့်ရှိပြီးသားပါ။ Passcode ဖြင့် အတည်ပြုပါ။'
+          }
+        }
+      } catch (e) {
+        // If not JSON or parsing fails, use original message
+        userFriendlyMessage = apiError
+      }
+      
+      showNotification(userFriendlyMessage, 'error')
       setApiError(null) // Clear the error after showing
     }
   }, [apiError, setApiError])
@@ -136,14 +463,15 @@ function App() {
   }
 
   const handleLogIn = () => {
-    // For now, simulate login and go to home screen
-    setCurrentScreen('home')
+    // Show notification for future login implementation
+    showNotification('Login လုပ်နိုင်မှုကို မကြာခင် implement လုပ်ပေးပါမယ်!', 'info')
   }
 
-  // Name formatting handler - capitalize first letter of each word
+  // Name formatting handler - English only, capitalize first letter of each word
   const handleNameChange = (field, value) => {
     const formattedValue = value
-      .replace(/[^a-zA-Z\s]/g, '') // Remove non-letters except spaces
+      .replace(/[^\u0000-\u007F\s]/g, '') // Remove non-ASCII characters (Myanmar, Arabic, Chinese, etc.)
+      .replace(/[^a-zA-Z\s]/g, '') // Remove non-letters except spaces (numbers, symbols)
       .replace(/\s+/g, ' ') // Replace multiple spaces with single space
       .split(' ')
       .map(word => {
@@ -402,10 +730,13 @@ function App() {
     const targetArray = isConfirm ? confirmPasscode : passcode
     const setTargetArray = isConfirm ? setConfirmPasscode : setPasscode
     
+    // Ensure targetArray is an array
+    const safeArray = Array.isArray(targetArray) ? targetArray : ['', '', '', '', '', '']
+    
     // Find first empty position
-    const emptyIndex = targetArray.findIndex(digit => digit === '')
+    const emptyIndex = safeArray.findIndex(digit => digit === '')
     if (emptyIndex !== -1) {
-      const newCode = [...targetArray]
+      const newCode = [...safeArray]
       newCode[emptyIndex] = number.toString()
       setTargetArray(newCode)
     }
@@ -415,10 +746,13 @@ function App() {
     const targetArray = isConfirm ? confirmPasscode : passcode
     const setTargetArray = isConfirm ? setConfirmPasscode : setPasscode
     
+    // Ensure targetArray is an array
+    const safeArray = Array.isArray(targetArray) ? targetArray : ['', '', '', '', '', '']
+    
     // Find last filled position
-    const lastFilledIndex = targetArray.map((digit, index) => digit !== '' ? index : -1).filter(index => index !== -1).pop()
+    const lastFilledIndex = safeArray.map((digit, index) => digit !== '' ? index : -1).filter(index => index !== -1).pop()
     if (lastFilledIndex !== undefined) {
-      const newCode = [...targetArray]
+      const newCode = [...safeArray]
       newCode[lastFilledIndex] = ''
       setTargetArray(newCode)
     }
@@ -509,15 +843,25 @@ function App() {
     return ''
   }
 
+  // Screen loading helper
+  const showScreenLoading = (message) => {
+    setScreenLoading(true)
+    setLoadingMessage(message)
+  }
+  
+  const hideScreenLoading = () => {
+    // Add small delay to ensure loading animation is visible
+    setTimeout(() => {
+      setScreenLoading(false)
+      setLoadingMessage('')
+    }, 1000) // 1 second minimum display time
+  }
+
   const handleNext = async () => {
     try {
       if (currentScreen === 'registration') {
         if (formData.firstName && formData.lastName) {
-          await registerNames({
-            firstName: formData.firstName,
-            middleName: formData.middleName,
-            lastName: formData.lastName
-          })
+          // Skip name registration for now - go to contact first for duplicate check
           setCurrentScreen('dateOfBirth')
         } else {
           showNotification('Please fill in required fields (First name and Last name)', 'error')
@@ -528,11 +872,7 @@ function App() {
             showNotification(`Please enter a valid date: ${dateError}`, 'error')
             return
           }
-          // Convert DD/MM/YYYY to ISO format for database
-          const [day, month, year] = formData.dateOfBirth.split('/')
-          const isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
-          
-          await registerDateOfBirth(isoDate)
+          // Just validate and proceed - don't save to DB yet
           setCurrentScreen('contact')
         } else {
           showNotification('Please enter your complete date of birth (DD/MM/YYYY)', 'error')
@@ -548,27 +888,92 @@ function App() {
             return
           }
           
+          try {
+            showScreenLoading('Contact information ကို စိစစ်နေပါသည်...')
+            
+            // First check for duplicates WITHOUT creating/updating user
+            await checkDuplicateContact({
+              email: formData.email,
+              phoneNumber: formData.phoneNumber,
+              countryCode: selectedCountry.code
+            })
+            
+            // If no duplicates, register all data together (names + date + contact)
+            showScreenLoading('အမည်နဲ့ အချက်အလက်များ သိမ်းဆည်းနေပါသည်...')
+            
+            // Register names first
+            await registerNames({
+              firstName: formData.firstName,
+              middleName: formData.middleName,
+              lastName: formData.lastName
+            })
+            
+            // Convert DD/MM/YYYY to ISO format for database
+            const [day, month, year] = formData.dateOfBirth.split('/')
+            const isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`
+            
+            // Register date of birth
+            await registerDateOfBirth(isoDate)
+            
+            // Register contact
           await registerContact({
             email: formData.email,
             phoneNumber: formData.phoneNumber,
             countryCode: selectedCountry.code
           })
+            
+            hideScreenLoading()
           
           // Reset resend stats when entering verification
           setResendCount(0)
           setResendCooldown(0)
           
+            setLoadingMessage('Verification code ပို့နေပါသည်...')
           // Send OTP automatically
           await sendOTPVerification(formData.email)
+            hideScreenLoading()
           setCurrentScreen('verification')
           showNotification(`Verification code sent to ${formData.email}`, 'success')
+          } catch (error) {
+            hideScreenLoading()
+            
+            // Check if it's an existing user error
+            try {
+              const errorData = JSON.parse(error.message)
+              if (errorData.type === 'EXISTING_USER') {
+                // Store existing user data
+                setFormData({
+                  ...formData,
+                  existingUserId: errorData.userId,
+                  hasMemberCard: errorData.hasMemberCard
+                })
+                
+                if (errorData.hasMemberCard) {
+                  // User has member card - redirect to login
+                  showNotification('ဒီအီးမေးလ်/ဖုန်းနံပါတ်ဖြင့် အကောင့်ရှိပြီးပါပြီး။ Login လုပ်ပါ။', 'info')
+                  setCurrentScreen('existingUserLogin')
+                } else {
+                  // User exists but no member card - verify passcode first
+                  showNotification('အကောင့်ရှိပြီးပါပြီး။ Member Card မရှိသေးပါ။ Passcode ဖြင့် အတည်ပြုပါ။', 'info')
+                  setCurrentScreen('existingUserPasscode')
+                }
+                return
+              }
+            } catch (parseError) {
+              // Not a JSON error, treat as regular error
+            }
+            
+            showNotification(error.message || 'Contact information သိမ်းဆည်းရာတွင် အမှားတစ်ခု ဖြစ်ပွားခဲ့သည်', 'error')
+          }
         } else {
           showNotification('Please fill in both email and phone number', 'error')
         }
       } else if (currentScreen === 'verification') {
         const code = verificationCode.join('')
         if (code.length === 6) {
+          showScreenLoading('OTP ကို စိစစ်နေပါသည်...')
           await verifyOTP(code)
+          hideScreenLoading()
           setCurrentScreen('success')
         } else {
           showNotification('Please enter the complete 6-digit verification code', 'error')
@@ -587,7 +992,9 @@ function App() {
         const confirmCode = confirmPasscode.join('')
         if (confirmCode.length === 6) {
           if (originalCode === confirmCode) {
+            showScreenLoading('Passcode ကို setup လုပ်နေပါသည်...')
             await setupPasscode(originalCode)
+            hideScreenLoading()
             setCurrentScreen('citizenship')
           } else {
             showNotification('Passcodes do not match. Please try again.', 'error')
@@ -598,20 +1005,25 @@ function App() {
         }
       } else if (currentScreen === 'citizenship') {
         if (selectedCitizenships.length > 0) {
+          showScreenLoading('Citizenship information ကို save လုပ်နေပါသည်...')
           await registerCitizenship(selectedCitizenships)
+          hideScreenLoading()
           setCurrentScreen('city')
         } else {
           showNotification('Please select at least one citizenship', 'error')
         }
       } else if (currentScreen === 'city') {
         if (selectedCity) {
+          showScreenLoading('Registration ပြီးဆုံးအောင် လုပ်နေပါသည်...')
           await registerCity(selectedCity)
+          hideScreenLoading()
           setCurrentScreen('finalSuccess')
         } else {
           showNotification('Please select your living city', 'error')
         }
       }
     } catch (error) {
+      hideScreenLoading()
       console.error('❌ API Error:', error)
       showNotification(error.message || 'Something went wrong. Please try again.', 'error')
     }
@@ -655,14 +1067,146 @@ function App() {
     return 'Need another code?'
   }
 
-  // Handle bottom navigation clicks
-  const handleBottomNavClick = (nav) => {
-    console.log(`${nav} clicked - redirecting to Member Card application`)
-    setCurrentScreen('memberCardApplication')
+    // Handle existing user passcode verification
+  const handleExistingUserPasscodeVerify = async () => {
+    try {
+      // Check if all 6 digits are filled
+      const passcodeString = passcode.join('')
+      if (passcodeString.length !== 6 || passcode.some(digit => digit === '')) {
+        // Trigger shake animation for incomplete passcode
+        setPasscodeError(true)
+        setTimeout(() => {
+          setPasscodeError(false)
+        }, 600)
+        return
+      }
+      
+      // No loading animation - directly verify passcode
+      const result = await authService.verifyExistingUserPasscode(formData.existingUserId, passcodeString)
+      
+      // Update formData with original account information from database
+      setFormData({
+        ...formData,
+        firstName: result.user.firstName,
+        middleName: result.user.middleName || '',
+        lastName: result.user.lastName,
+        dateOfBirth: result.user.dateOfBirth,
+        userId: formData.existingUserId,
+        // Keep the contact info from current attempt for verification
+        email: formData.email,
+        phone: formData.phone,
+        phoneNumber: formData.phoneNumber,
+        country: formData.country
+      })
+      
+      // Go to name confirmation with original user data
+      setCurrentScreen('nameConfirmation')
+      showNotification('Passcode အတည်ပြုပြီးပါပြီး! နာမည်အတည်ပြုပါ။', 'success')
+      
+    } catch (error) {
+      // Immediately trigger shake animation and red color
+      setPasscodeError(true)
+      
+      // Clear passcode and reset error state after animation
+      setTimeout(() => {
+        setPasscode(['', '', '', '', '', ''])
+        setPasscodeError(false)
+      }, 600)
+    }
   }
 
-  // Home Screen
-  if (currentScreen === 'home') {
+  // Handle member card completion
+  const handleCompleteMemberCard = async () => {
+    try {
+      console.log('🎴 Starting Member Card completion...')
+      console.log('🔍 Form data check:', {
+        userId: currentUserId,
+        formUserId: formData.userId,
+        loveLanguage: formData.loveLanguage,
+        privatePhoto: formData.privatePhoto ? 'Present' : 'Missing',
+        publicPhoto: formData.publicPhoto ? 'Present' : 'Missing',
+        favoriteFood: formData.favoriteFood,
+        favoriteArtist: formData.favoriteArtist
+      })
+
+      // Validation checks
+      if (!formData.loveLanguage) {
+        showNotification('Love Language ရွေးချယ်ပါ', 'error')
+        return
+      }
+
+      if (!formData.privatePhoto || !formData.publicPhoto) {
+        showNotification('ဓာတ်ပုံ နှစ်ပုံလုံး ထည့်ပါ', 'error')
+        return
+      }
+
+      // Use currentUserId from hook, fallback to formData.userId
+      const userId = currentUserId || formData.userId
+      if (!userId) {
+        showNotification('❌ User ID not found. Please restart registration.', 'error')
+        console.error('❌ No userId available:', { currentUserId, formUserId: formData.userId })
+        return
+      }
+      
+      showScreenLoading('Member Card ပြုလုပ်နေပါသည်...')
+      
+      const memberCardData = {
+        relationshipStatus: formData.relationshipStatus,
+        gender: formData.gender,
+        favoriteFood: Array.isArray(formData.favoriteFood) ? formData.favoriteFood.join(', ') : formData.favoriteFood,
+        favoriteArtist: Array.isArray(formData.favoriteArtist) ? formData.favoriteArtist.join(', ') : formData.favoriteArtist,
+        loveLanguage: formData.loveLanguage,
+        privatePhoto: formData.privatePhoto,
+        publicPhoto: formData.publicPhoto,
+        // Include names for database update (especially for existing users who edited names)
+        firstName: formData.firstName,
+        middleName: formData.middleName,
+        lastName: formData.lastName
+      }
+      
+      console.log('🔍 Debug Member Card Completion:', {
+        userId: userId,
+        memberCardDataKeys: Object.keys(memberCardData),
+        memberCardData: memberCardData
+      })
+      
+      const result = await completeMemberCard(userId, memberCardData)
+      
+      console.log('✅ Member Card completion result:', result)
+      
+      hideScreenLoading()
+      showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! UC ERA သို့ welcome! ✨', 'success')
+      
+      // Optional: Reset to welcome or redirect to login
+      setTimeout(() => {
+        setCurrentScreen('welcome')
+        // Reset form data
+        setFormData({
+          firstName: '',
+          middleName: '',
+          lastName: '',
+          dateOfBirth: '',
+          email: '',
+          phoneNumber: '',
+          relationshipStatus: '',
+          gender: '',
+          favoriteFood: [],
+          favoriteArtist: [],
+          loveLanguage: '',
+          privatePhoto: null,
+          publicPhoto: null,
+          userId: null
+        })
+      }, 3000)
+      
+    } catch (error) {
+      hideScreenLoading()
+      showNotification(error.message || 'Member Card ပြုလုပ်ရာတွင် အမှားတစ်ခု ဖြစ်ပွားခဲ့သည်', 'error')
+    }
+  }
+
+  // Existing User Passcode Verification Screen
+  if (currentScreen === 'existingUserPasscode') {
     return (
       <div className="app">
         <div className="container">
@@ -673,126 +1217,86 @@ function App() {
             </div>
           )}
 
-          {/* Header */}
-          <div className="home-header">
-            <h1 className="home-title">UC ERA</h1>
-            <div className="home-subtitle">Welcome back!</div>
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
           </div>
-
-          {/* Main Content Area */}
-          <div className="home-content">
-            <div className="member-status-card">
-              <div className="status-icon">👤</div>
-              <h2>Member Card Required</h2>
-              <p>Apply for your UC Member Card to access all features</p>
-              <button 
-                className="apply-card-btn"
-                onClick={() => setCurrentScreen('memberCardApplication')}
-              >
-                Apply for Member Card
+          )}
+          
+          <div className="form-header">
+            <button className="back-button" onClick={() => setCurrentScreen('contact')}>
+              ←
               </button>
-            </div>
+            <span className="help-link">Help</span>
           </div>
 
-          {/* Bottom Navigation Bar */}
-          <div className="bottom-nav">
-            <div className="nav-item" onClick={() => handleBottomNavClick('Chat')}>
-              <div className="nav-icon">💬</div>
-              <span className="nav-label">Chat</span>
+          <div className="form-content">
+            <div className="welcome-logo">
+              <div className="logo-text">🔐</div>
             </div>
-            <div className="nav-item" onClick={() => handleBottomNavClick('Menu')}>
-              <div className="nav-icon">☰</div>
-              <span className="nav-label">Menu</span>
+            
+            <h2 className="form-title">Passcode အတည်ပြုခြင်း</h2>
+            <p className="form-subtitle">
+              သင်၏ UC ERA အကောင့်၏ passcode ကို ထည့်ပါ
+            </p>
+            
+            <div className="existing-user-info">
+              <p>အီးမေးလ်: <strong>{formData.email}</strong></p>
+              <p>ဖုန်းနံပါတ်: <strong>{formData.phoneNumber}</strong></p>
             </div>
-            <div className="nav-item" onClick={() => handleBottomNavClick('Profile')}>
-              <div className="nav-icon">👤</div>
-              <span className="nav-label">Profile</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Member Card Application Screen
-  if (currentScreen === 'memberCardApplication') {
-    return (
-      <div className="app">
-        <div className="container">
-          {notification.show && (
-            <div className={`notification ${notification.type}`}>
-              <span className="notification-message">{notification.message}</span>
-              <button className="notification-close" onClick={closeNotification}>×</button>
-            </div>
-          )}
-
-          {/* Header with Back Button */}
-          <div className="member-card-header">
-            <button className="back-btn" onClick={() => setCurrentScreen('home')}>
-              ← Back
-            </button>
-            <h1 className="page-title">Member Card Application</h1>
+            
+            <div className={`passcode-dots ${passcodeError ? 'error shake' : ''}`}>
+              {(passcode || ['', '', '', '', '', '']).map((digit, index) => (
+                <input
+                  key={index}
+                  id={`passcode-${index}`}
+                  ref={(el) => passcodeInputRefs.current[index] = el}
+                  type="password"
+                  className="passcode-dot"
+                  value={digit || ''}
+                  onChange={(e) => handlePasscodeChange(index, e.target.value)}
+                  onKeyDown={(e) => handlePasscodeKeyDown(index, e)}
+                  maxLength="1"
+                  style={{ display: 'none' }}
+                />
+              ))}
+              {(passcode || ['', '', '', '', '', '']).map((digit, index) => (
+                <div key={`dot-${index}`} className={`passcode-circle ${digit ? 'filled' : ''} ${passcodeError ? 'error' : ''}`}></div>
+              ))}
           </div>
 
-          {/* Application Form */}
-          <div className="member-card-content">
-            <div className="application-intro">
-              <div className="card-preview">
-                <div className="card-design">
-                  <div className="card-header">
-                    <img src="/ucera-logo.png" alt="UC ERA" className="card-logo" />
-                    <span className="card-title">UC MEMBER</span>
+            <div className="number-pad">
+              <div className="number-row">
+                <button className="number-button" onClick={() => handleNumberPadClick(1)}>1</button>
+                <button className="number-button" onClick={() => handleNumberPadClick(2)}>2</button>
+                <button className="number-button" onClick={() => handleNumberPadClick(3)}>3</button>
                   </div>
-                  <div className="card-body">
-                    <div className="member-info">
-                      <div className="member-name">Your Name Here</div>
-                      <div className="member-id">ID: *******</div>
+              <div className="number-row">
+                <button className="number-button" onClick={() => handleNumberPadClick(4)}>4</button>
+                <button className="number-button" onClick={() => handleNumberPadClick(5)}>5</button>
+                <button className="number-button" onClick={() => handleNumberPadClick(6)}>6</button>
                     </div>
-                    <div className="card-chip">🔒</div>
+              <div className="number-row">
+                <button className="number-button" onClick={() => handleNumberPadClick(7)}>7</button>
+                <button className="number-button" onClick={() => handleNumberPadClick(8)}>8</button>
+                <button className="number-button" onClick={() => handleNumberPadClick(9)}>9</button>
                   </div>
+              <div className="number-row">
+                <button className="number-button invisible"></button>
+                <button className="number-button" onClick={() => handleNumberPadClick(0)}>0</button>
+                <button className="number-button backspace" onClick={() => handlePasscodeBackspace()}>⌫</button>
                 </div>
               </div>
-              
-              <div className="application-text">
-                <h2>Apply for UC Member Card</h2>
-                <p>Get your exclusive UC Member Card with:</p>
-                <ul className="benefits-list">
-                  <li>✓ Secure digital identity</li>
-                  <li>✓ Access to all UC services</li>
-                  <li>✓ Protected personal information</li>
-                  <li>✓ Quick login with steganography</li>
-                </ul>
-              </div>
             </div>
 
-            <div className="application-actions">
+          <div className="form-footer">
               <button 
-                className="start-application-btn"
-                onClick={() => showNotification('Member Card application process will be implemented soon!', 'info')}
+              className="next-button" 
+              onClick={handleExistingUserPasscodeVerify}
+              disabled={passcode.length !== 6}
               >
-                Start Application Process
+              <span className="button-text">Verify & Continue</span>
               </button>
-              
-              <div className="application-note">
-                <p>📱 Your card will use advanced steganography to securely store your email and date of birth for future login.</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Navigation (same as home) */}
-          <div className="bottom-nav">
-            <div className="nav-item" onClick={() => handleBottomNavClick('Chat')}>
-              <div className="nav-icon">💬</div>
-              <span className="nav-label">Chat</span>
-            </div>
-            <div className="nav-item" onClick={() => handleBottomNavClick('Menu')}>
-              <div className="nav-icon">☰</div>
-              <span className="nav-label">Menu</span>
-            </div>
-            <div className="nav-item" onClick={() => handleBottomNavClick('Profile')}>
-              <div className="nav-icon">👤</div>
-              <span className="nav-label">Profile</span>
-            </div>
           </div>
         </div>
       </div>
@@ -811,6 +1315,12 @@ function App() {
             </div>
           )}
           
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
+            </div>
+          )}
+          
           <div className="success-screen">
             <div className="success-icon">
               <div className="checkmark-circle">
@@ -823,8 +1333,11 @@ function App() {
           </div>
 
           <div className="form-footer">
-            <button className="next-button" onClick={() => showNotification('Welcome to UC ERA! 🎉', 'success')}>
-              Get Started
+            <button 
+              className="next-button" 
+              onClick={() => setCurrentScreen('memberCardApplication')}
+            >
+              <span className="button-text">Get Started</span>
             </button>
           </div>
         </div>
@@ -841,6 +1354,12 @@ function App() {
             <div className={`notification ${notification.type}`}>
               <span className="notification-message">{notification.message}</span>
               <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
             </div>
           )}
           
@@ -889,6 +1408,12 @@ function App() {
             <div className={`notification ${notification.type}`}>
               <span className="notification-message">{notification.message}</span>
               <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
             </div>
           )}
           
@@ -945,6 +1470,12 @@ function App() {
             <div className={`notification ${notification.type}`}>
               <span className="notification-message">{notification.message}</span>
               <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
             </div>
           )}
           
@@ -1005,8 +1536,12 @@ function App() {
           </div>
 
           <div className="form-footer">
-            <button className="next-button" onClick={handleNext}>
-              Confirm
+            <button 
+              className={`next-button ${isLoading ? 'loading' : ''}`}
+              onClick={handleNext}
+              disabled={isLoading}
+            >
+              <span className="button-text">Confirm</span>
             </button>
           </div>
         </div>
@@ -1023,6 +1558,12 @@ function App() {
             <div className={`notification ${notification.type}`}>
               <span className="notification-message">{notification.message}</span>
               <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
             </div>
           )}
           
@@ -1104,6 +1645,12 @@ function App() {
             </div>
           )}
           
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
+            </div>
+          )}
+          
           <div className="success-screen">
             <div className="success-icon">
               <div className="checkmark-circle">
@@ -1132,6 +1679,12 @@ function App() {
             <div className={`notification ${notification.type}`}>
               <span className="notification-message">{notification.message}</span>
               <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
             </div>
           )}
           
@@ -1184,8 +1737,12 @@ function App() {
           </div>
 
           <div className="form-footer">
-            <button className="next-button" onClick={handleNext}>
-              Verify
+            <button 
+              className={`next-button ${isLoading ? 'loading' : ''}`}
+              onClick={handleNext}
+              disabled={isLoading}
+            >
+              <span className="button-text">Verify</span>
             </button>
           </div>
         </div>
@@ -1201,6 +1758,12 @@ function App() {
             <div className={`notification ${notification.type}`}>
               <span className="notification-message">{notification.message}</span>
               <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
             </div>
           )}
           
@@ -1285,6 +1848,12 @@ function App() {
             </div>
           )}
           
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
+            </div>
+          )}
+          
           <div className="form-header">
             <button className="back-button" onClick={goBack}>
               ←
@@ -1357,6 +1926,12 @@ function App() {
             </div>
           )}
           
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
+            </div>
+          )}
+          
           <div className="form-header">
             <button className="back-button" onClick={goBack}>
               ←
@@ -1378,7 +1953,7 @@ function App() {
 
             <div className="form-group">
               <label className="form-label">Middle name(s)</label>
-              <p className="form-hint">(ပြီမရှိရင်ထားခဲ့ပါ)</p>
+              <p className="form-hint">[မရှိရင်ထားခဲ့ပါ]</p>
               <input
                 type="text"
                 className="form-input"
@@ -1410,6 +1985,8 @@ function App() {
     )
   }
 
+  // Member Card Application Screen
+  if (currentScreen === 'memberCardApplication') {
   return (
     <div className="app">
       <div className="container">
@@ -1417,6 +1994,1209 @@ function App() {
           <div className={`notification ${notification.type}`}>
             <span className="notification-message">{notification.message}</span>
             <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
+            </div>
+          )}
+          
+          <div className="member-card-header">
+            <button className="back-button" onClick={() => setCurrentScreen('finalSuccess')}>
+              ←
+            </button>
+            <span className="help-link">Help</span>
+          </div>
+          
+          <div className="member-card-content">
+            <div className="card-icon">
+              <MemberCard />
+            </div>
+            
+            <h2 className="member-card-title">Verify Your Member Card</h2>
+            
+            <p className="member-card-description">
+              UC ERA ၏ feature များအားလုံးကို အသုံးပြုနိုင်ရန် သင်၏ Member Card ကို အရင်ဆုံးပြုလုပ်ရန် လိုအပ်ပါသည်။
+            </p>
+            
+            <p className="member-card-description">
+              ဤ Card သည် app သို့ဝင်ရောက်ရန် သင်၏လုံခြုံသော Digital သော့ချက်ဖြစ်ပါသည်။
+            </p>
+            
+            <p className="member-card-description">
+              သင်၏အချက်အလက်များဖြင့် Card ကိုပြုလုပ်မည်ဖြစ်ကြောင်း အောက်တွင် အတည်ပြုပါ။
+            </p>
+            
+            <div className="confirmation-section">
+              <div className="confirmation-title">
+                <h3>သင်၏ Digital Identity ကို အတည်ပြုပါ</h3>
+              </div>
+              
+              <div className="confirmation-item">
+                <div className="checkbox-container">
+                  <div className="checkbox">✓</div>
+                </div>
+                <div className="confirmation-text">
+                  UC ERA သို့ လုံခြုံစွာဝင်ရောက်ရန် သင်၏ Digital Member Card ကို အရင်ဆုံးပြုလုပ်ပါ။
+                </div>
+              </div>
+              
+              <div className="confirmation-item">
+                <div className="checkbox-container">
+                  <div className="checkbox">✓</div>
+                </div>
+                <div className="confirmation-text">
+                  ဤ Card သည် သင်၏အချက်အလက်များကို အဆင့်မြင့်နည်းပညာဖြင့် ကာကွယ်ပေးမည်ဖြစ်ပါသည်။
+                </div>
+              </div>
+              
+              <div className="confirmation-item">
+                <div className="checkbox-container">
+                  <div className="checkbox">✓</div>
+                </div>
+                <div className="confirmation-text">
+                  Card ကို မိမိတစ်ဦးတည်းအတွက်သာ အသုံးပြုမည်ဖြစ်ကြောင်း အတည်ပြုပေးပါ။
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="form-footer">
+            <button 
+              className="member-card-button"
+              onClick={() => setCurrentScreen('nameConfirmation')}
+            >
+              <span className="button-text">Get Member Card</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Name Confirmation Screen
+  if (currentScreen === 'nameConfirmation') {
+    return (
+      <div className="app">
+        <div className="container">
+          {notification.show && (
+            <div className={`notification ${notification.type}`}>
+              <span className="notification-message">{notification.message}</span>
+              <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
+            </div>
+          )}
+          
+          <div className="form-header">
+            <button className="back-button" onClick={() => setCurrentScreen('memberCardApplication')}>
+              ←
+            </button>
+            <span className="help-link">Help</span>
+          </div>
+          
+          <div className="form-content">
+            <div className="welcome-logo">
+              <div className="logo-text"></div>
+            </div>
+            
+            <h2 className="form-title">နာမည်အတည်ပြုခြင်း</h2>
+            <p className="form-subtitle">
+              အောက်တွင်ပြထားသော နာမည်များသည် သင်၏နာမည်အရင်းများ ဖြစ်ပါသလား?
+            </p>
+            
+            <div className="name-display-section">
+              <div className="name-display-card">
+                {editingNames ? (
+                  <>
+                    <div className="name-field">
+                      <label>First Name</label>
+                      <input
+                        type="text"
+                        className="name-input"
+                        value={tempFormData.firstName || formData.firstName || ''}
+                        onChange={(e) => {
+                          const englishOnly = e.target.value
+                            .replace(/[^\u0000-\u007F\s]/g, '') // Remove non-ASCII characters (Myanmar, etc.)
+                            .replace(/[^a-zA-Z\s]/g, '') // Keep only English letters and spaces
+                            .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+                            .split(' ')
+                            .map(word => {
+                              if (word.length > 0) {
+                                return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                              }
+                              return word
+                            })
+                            .join(' ')
+                          setTempFormData({...tempFormData, firstName: englishOnly})
+                        }}
+                        placeholder="Enter first name (English only)"
+                      />
+                    </div>
+                    <div className="name-field">
+                      <label>Middle Name</label>
+                      <input
+                        type="text"
+                        className="name-input"
+                        value={tempFormData.middleName || formData.middleName || ''}
+                        onChange={(e) => {
+                          const englishOnly = e.target.value
+                            .replace(/[^\u0000-\u007F\s]/g, '') // Remove non-ASCII characters (Myanmar, etc.)
+                            .replace(/[^a-zA-Z\s]/g, '') // Keep only English letters and spaces
+                            .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+                            .split(' ')
+                            .map(word => {
+                              if (word.length > 0) {
+                                return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                              }
+                              return word
+                            })
+                            .join(' ')
+                          setTempFormData({...tempFormData, middleName: englishOnly})
+                        }}
+                        placeholder="Enter middle name (English only, optional)"
+                      />
+                    </div>
+                    <div className="name-field">
+                      <label>Last Name</label>
+                      <input
+                        type="text"
+                        className="name-input"
+                        value={tempFormData.lastName || formData.lastName || ''}
+                        onChange={(e) => {
+                          const englishOnly = e.target.value
+                            .replace(/[^\u0000-\u007F\s]/g, '') // Remove non-ASCII characters (Myanmar, etc.)
+                            .replace(/[^a-zA-Z\s]/g, '') // Keep only English letters and spaces
+                            .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+                            .split(' ')
+                            .map(word => {
+                              if (word.length > 0) {
+                                return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+                              }
+                              return word
+                            })
+                            .join(' ')
+                          setTempFormData({...tempFormData, lastName: englishOnly})
+                        }}
+                        placeholder="Enter last name (English only)"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="name-field">
+                      <label>First Name</label>
+                      <div className="name-value">{formData.firstName || 'မရှိပါ'}</div>
+                    </div>
+                    
+                    {formData.middleName && (
+                      <div className="name-field">
+                        <label>Middle Name</label>
+                        <div className="name-value">{formData.middleName}</div>
+                      </div>
+                    )}
+                    
+                    <div className="name-field">
+                      <label>Last Name</label>
+                      <div className="name-value">{formData.lastName || 'မရှိပါ'}</div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            
+            <div className="confirmation-buttons">
+              {editingNames ? (
+                <>
+                                  <button 
+                  className="confirm-button correct"
+                  onClick={async () => {
+                    try {
+                      showScreenLoading('နာမည်အပြောင်းအလဲများ သိမ်းနေပါသည်...')
+                      
+                      // Update database immediately with new names
+                      const updateData = {
+                        firstName: tempFormData.firstName || formData.firstName,
+                        middleName: tempFormData.middleName || formData.middleName,
+                        lastName: tempFormData.lastName || formData.lastName
+                      }
+                      
+                      console.log('💾 Updating names in database:', updateData)
+                      
+                      const updatedUser = await authService.updateUserNames(formData.userId, updateData)
+                      
+                      // Update formData with saved names
+                      setFormData({
+                        ...formData,
+                        firstName: updateData.firstName,
+                        middleName: updateData.middleName,
+                        lastName: updateData.lastName
+                      })
+                      setEditingNames(false)
+                      setTempFormData({})
+                      
+                      hideScreenLoading()
+                      showNotification('✅ နာမည်များ အောင်မြင်စွာ ပြောင်းလဲပြီးပါပြီ!', 'success')
+                      
+                      console.log('✅ Names updated successfully in database:', updatedUser)
+                    } catch (error) {
+                      hideScreenLoading()
+                      showNotification('❌ နာမည်ပြောင်းလဲခြင်း မအောင်မြင်ပါ: ' + error.message, 'error')
+                      console.error('❌ Name update failed:', error)
+                    }
+                  }}
+                >
+                  <span className="button-text">✓ သိမ်းမည်</span>
+                </button>
+                  
+                  <button 
+                    className="confirm-button incorrect"
+                    onClick={() => {
+                      setEditingNames(false)
+                      setTempFormData({})
+                    }}
+                  >
+                    <span className="button-text">✗ ပယ်ဖျက်မည်</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button 
+                    className="confirm-button correct"
+                    onClick={() => setCurrentScreen('relationshipStatus')}
+                  >
+                    <span className="button-text">✓ မှန်ကန်ပါသည်</span>
+                  </button>
+                  
+                  <button 
+                    className="confirm-button incorrect"
+                    onClick={() => {
+                      setEditingNames(true)
+                      setTempFormData({
+                        firstName: formData.firstName,
+                        middleName: formData.middleName,
+                        lastName: formData.lastName
+                      })
+                    }}
+                  >
+                    <span className="button-text">✗ ပြန်ပြင်ချင်ပါသည်</span>
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Relationship Status Screen
+  if (currentScreen === 'relationshipStatus') {
+    return (
+      <div className="app">
+        <div className="container">
+          {notification.show && (
+            <div className={`notification ${notification.type}`}>
+              <span className="notification-message">{notification.message}</span>
+              <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
+            </div>
+          )}
+          
+          <div className="form-header">
+            <button className="back-button" onClick={() => setCurrentScreen('nameConfirmation')}>
+              ←
+            </button>
+            <span className="help-link">Help</span>
+          </div>
+          
+          <div className="form-content">
+            <div className="welcome-logo">
+              <div className="logo-text">💕</div>
+            </div>
+            
+            <h2 className="form-title">ရေးရာဆက်ဆံရေး အခြေအနေ</h2>
+            <p className="form-subtitle">
+              သင်၏လက်ရှိ ရေးရာဆက်ဆံရေး အခြေအနေကို ရွေးချယ်ပါ
+            </p>
+            
+            <div className="selection-grid">
+              <button 
+                className={`selection-item ${formData.relationshipStatus === 'single' ? 'selected' : ''}`}
+                onClick={() => setFormData({...formData, relationshipStatus: 'single'})}
+              >
+                <div className="selection-icon">💔</div>
+                <span>လွတ်လပ်သူ</span>
+              </button>
+              
+              <button 
+                className={`selection-item ${formData.relationshipStatus === 'in_relationship' ? 'selected' : ''}`}
+                onClick={() => setFormData({...formData, relationshipStatus: 'in_relationship'})}
+              >
+                <div className="selection-icon">💑</div>
+                <span>ချစ်သူရှိသူ</span>
+              </button>
+              
+              <button 
+                className={`selection-item ${formData.relationshipStatus === 'married' ? 'selected' : ''}`}
+                onClick={() => setFormData({...formData, relationshipStatus: 'married'})}
+              >
+                <div className="selection-icon">💍</div>
+                <span>လက်ထပ်ပြီးသူ</span>
+              </button>
+              
+              <button 
+                className={`selection-item ${formData.relationshipStatus === 'complicated' ? 'selected' : ''}`}
+                onClick={() => setFormData({...formData, relationshipStatus: 'complicated'})}
+              >
+                <div className="selection-icon">🤔</div>
+                <span>ရှုပ်ထွေးနေတယ်</span>
+              </button>
+              
+              <button 
+                className={`selection-item ${formData.relationshipStatus === 'not_specified' ? 'selected' : ''}`}
+                onClick={() => setFormData({...formData, relationshipStatus: 'not_specified'})}
+              >
+                <div className="selection-icon">🤐</div>
+                <span>မပြောချင်ပါ</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="form-footer">
+            <button 
+              className="next-button" 
+              onClick={() => setCurrentScreen('genderSelection')}
+              disabled={!formData.relationshipStatus}
+            >
+              <span className="button-text">Next</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Gender Selection Screen
+  if (currentScreen === 'genderSelection') {
+    return (
+      <div className="app">
+        <div className="container">
+          {notification.show && (
+            <div className={`notification ${notification.type}`}>
+              <span className="notification-message">{notification.message}</span>
+              <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
+            </div>
+          )}
+          
+          <div className="form-header">
+            <button className="back-button" onClick={() => setCurrentScreen('relationshipStatus')}>
+              ←
+            </button>
+            <span className="help-link">Help</span>
+          </div>
+          
+          <div className="form-content">
+            <div className="welcome-logo">
+              <div className="logo-text">⚧️</div>
+            </div>
+            
+            <h2 className="form-title">လိင်ပိုင်းဆိုင်ရာ</h2>
+            <p className="form-subtitle">
+              သင်၏လိင်ပိုင်းဆိုင်ရာ ပုံစံကို ရွေးချယ်ပါ
+            </p>
+            
+            <div className="selection-grid">
+              <button 
+                className={`selection-item ${formData.gender === 'male' ? 'selected' : ''}`}
+                onClick={() => setFormData({...formData, gender: 'male'})}
+              >
+                <div className="selection-icon">👨</div>
+                <span>ယောက်ျား</span>
+              </button>
+              
+              <button 
+                className={`selection-item ${formData.gender === 'female' ? 'selected' : ''}`}
+                onClick={() => setFormData({...formData, gender: 'female'})}
+              >
+                <div className="selection-icon">👩</div>
+                <span>မိန်းမ</span>
+              </button>
+              
+              <button 
+                className={`selection-item ${formData.gender === 'lgbtq' ? 'selected' : ''}`}
+                onClick={() => setFormData({...formData, gender: 'lgbtq'})}
+              >
+                <div className="selection-icon">🏳️‍🌈</div>
+                <span>LGBTQ+</span>
+              </button>
+              
+              <button 
+                className={`selection-item ${formData.gender === 'prefer_not_to_say' ? 'selected' : ''}`}
+                onClick={() => setFormData({...formData, gender: 'prefer_not_to_say'})}
+              >
+                <div className="selection-icon">🤐</div>
+                <span>မပြောချင်ပါ</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="form-footer">
+            <button 
+              className="next-button" 
+              onClick={() => setCurrentScreen('favoriteFood')}
+              disabled={!formData.gender}
+            >
+              <span className="button-text">Next</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Favorite Food Screen
+  if (currentScreen === 'favoriteFood') {
+    return (
+      <div className="app">
+        <div className="container">
+          {notification.show && (
+            <div className={`notification ${notification.type}`}>
+              <span className="notification-message">{notification.message}</span>
+              <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
+            </div>
+          )}
+          
+          <div className="form-header">
+            <button className="back-button" onClick={() => setCurrentScreen('genderSelection')}>
+              ←
+            </button>
+            <span className="help-link">Help</span>
+          </div>
+          
+          <div className="form-content">
+            <div className="welcome-logo">
+              <div className="logo-text">Food</div>
+            </div>
+            
+            <h2 className="form-title">နှစ်သက်ရာ အစားအစာများ</h2>
+            <p className="form-subtitle">
+              သင်အကြိုက်ဆုံး မြန်မာ့ရိုးရာ အစားအစာများကို ရွေးချယ်ပါ (တစ်ခုထက်ပိုရွေးနိုင်ပါသည်)
+            </p>
+            
+            <div className="custom-input-section">
+              <div className="form-input-group">
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="စာရင်းမှာ မပါရင် ကိုယ်တိုင်ရေးပါ..."
+                  value={customFood}
+                  onChange={(e) => setCustomFood(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && customFood.trim()) {
+                      const currentFoods = Array.isArray(formData.favoriteFood) ? formData.favoriteFood : []
+                      if (!currentFoods.includes(customFood.trim())) {
+                        setFormData({
+                          ...formData, 
+                          favoriteFood: [...currentFoods, customFood.trim()]
+                        })
+                      }
+                      setCustomFood('')
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="add-custom-button"
+                  onClick={() => {
+                    if (customFood.trim()) {
+                      const currentFoods = Array.isArray(formData.favoriteFood) ? formData.favoriteFood : []
+                      if (!currentFoods.includes(customFood.trim())) {
+                        setFormData({
+                          ...formData, 
+                          favoriteFood: [...currentFoods, customFood.trim()]
+                        })
+                      }
+                      setCustomFood('')
+                    }
+                  }}
+                  disabled={!customFood.trim()}
+                >
+                  ထည့်မယ်
+                </button>
+              </div>
+            </div>
+            
+            <div className="selected-items-section">
+              {Array.isArray(formData.favoriteFood) && formData.favoriteFood.length > 0 && (
+                <div className="selected-items">
+                  <h4>ရွေးချယ်ထားသော အစားအစာများ:</h4>
+                  <div className="selected-tags">
+                    {formData.favoriteFood.map((food, index) => (
+                      <span key={index} className="selected-tag">
+                        {food}
+                        <button
+                          className="remove-tag"
+                          onClick={() => {
+                            const updatedFoods = formData.favoriteFood.filter((_, i) => i !== index)
+                            setFormData({...formData, favoriteFood: updatedFoods})
+                          }}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="selection-grid">
+              {myanmarFoods.map((food, index) => (
+                <button
+                  key={index}
+                  className={`selection-item ${
+                    Array.isArray(formData.favoriteFood) && formData.favoriteFood.includes(food) ? 'selected' : ''
+                  }`}
+                  onClick={() => {
+                    const currentFoods = Array.isArray(formData.favoriteFood) ? formData.favoriteFood : []
+                    if (currentFoods.includes(food)) {
+                      // Remove if already selected
+                      setFormData({
+                        ...formData, 
+                        favoriteFood: currentFoods.filter(f => f !== food)
+                      })
+                    } else {
+                      // Add if not selected
+                      setFormData({
+                        ...formData, 
+                        favoriteFood: [...currentFoods, food]
+                      })
+                    }
+                  }}
+                >
+                  <span>{food}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-footer">
+            <button 
+              className="next-button" 
+              onClick={() => setCurrentScreen('favoriteArtist')}
+              disabled={!Array.isArray(formData.favoriteFood) || formData.favoriteFood.length === 0}
+            >
+              <span className="button-text">Next</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Favorite Artist Screen
+  if (currentScreen === 'favoriteArtist') {
+    return (
+      <div className="app">
+        <div className="container">
+          {notification.show && (
+            <div className={`notification ${notification.type}`}>
+              <span className="notification-message">{notification.message}</span>
+              <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
+            </div>
+          )}
+          
+          <div className="form-header">
+            <button className="back-button" onClick={() => setCurrentScreen('favoriteFood')}>
+              ←
+            </button>
+            <span className="help-link">Help</span>
+          </div>
+          
+          <div className="form-content">
+            <div className="welcome-logo">
+              <div className="logo-text">Artist</div>
+            </div>
+            
+            <h2 className="form-title">နှစ်သက်ရာ အနုပညာရှင်များ</h2>
+            <p className="form-subtitle">
+              သင်အကြိုက်ဆုံး မြန်မာ့ အဆိုတော်/အနုပညာရှင်များကို ရွေးချယ်ပါ (တစ်ယောက်ထက်ပိုရွေးနိုင်ပါသည်)
+            </p>
+            
+            <div className="custom-input-section">
+              <div className="form-input-group">
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="စာရင်းမှာ မပါရင် ကိုယ်တိုင်ရေးပါ..."
+                  value={customArtist}
+                  onChange={(e) => setCustomArtist(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && customArtist.trim()) {
+                      const currentArtists = Array.isArray(formData.favoriteArtist) ? formData.favoriteArtist : []
+                      if (!currentArtists.includes(customArtist.trim())) {
+                        setFormData({
+                          ...formData, 
+                          favoriteArtist: [...currentArtists, customArtist.trim()]
+                        })
+                      }
+                      setCustomArtist('')
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="add-custom-button"
+                  onClick={() => {
+                    if (customArtist.trim()) {
+                      const currentArtists = Array.isArray(formData.favoriteArtist) ? formData.favoriteArtist : []
+                      if (!currentArtists.includes(customArtist.trim())) {
+                        setFormData({
+                          ...formData, 
+                          favoriteArtist: [...currentArtists, customArtist.trim()]
+                        })
+                      }
+                      setCustomArtist('')
+                    }
+                  }}
+                  disabled={!customArtist.trim()}
+                >
+                  ထည့်မယ်
+                </button>
+              </div>
+            </div>
+            
+            <div className="selected-items-section">
+              {Array.isArray(formData.favoriteArtist) && formData.favoriteArtist.length > 0 && (
+                <div className="selected-items">
+                  <h4>ရွေးချယ်ထားသော အနုပညာရှင်များ:</h4>
+                  <div className="selected-tags">
+                    {formData.favoriteArtist.map((artist, index) => (
+                      <span key={index} className="selected-tag">
+                        {artist}
+                        <button
+                          className="remove-tag"
+                          onClick={() => {
+                            const updatedArtists = formData.favoriteArtist.filter((_, i) => i !== index)
+                            setFormData({...formData, favoriteArtist: updatedArtists})
+                          }}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="selection-grid">
+              {myanmarArtists.map((artist, index) => (
+                <button
+                  key={index}
+                  className={`selection-item ${
+                    Array.isArray(formData.favoriteArtist) && formData.favoriteArtist.includes(artist) ? 'selected' : ''
+                  }`}
+                  onClick={() => {
+                    const currentArtists = Array.isArray(formData.favoriteArtist) ? formData.favoriteArtist : []
+                    if (currentArtists.includes(artist)) {
+                      // Remove if already selected
+                      setFormData({
+                        ...formData, 
+                        favoriteArtist: currentArtists.filter(a => a !== artist)
+                      })
+                    } else {
+                      // Add if not selected
+                      setFormData({
+                        ...formData, 
+                        favoriteArtist: [...currentArtists, artist]
+                      })
+                    }
+                  }}
+                >
+                  <span>{artist}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-footer">
+            <button 
+              className="next-button" 
+              onClick={() => setCurrentScreen('loveLanguage')}
+              disabled={!Array.isArray(formData.favoriteArtist) || formData.favoriteArtist.length === 0}
+            >
+              <span className="button-text">Next</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Love Language Screen
+  if (currentScreen === 'loveLanguage') {
+    return (
+      <div className="app">
+        <div className="container">
+          {notification.show && (
+            <div className={`notification ${notification.type}`}>
+              <span className="notification-message">{notification.message}</span>
+              <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
+            </div>
+          )}
+          
+          <div className="form-header">
+            <button className="back-button" onClick={() => setCurrentScreen('favoriteArtist')}>
+              ←
+            </button>
+            <span className="help-link">Help</span>
+          </div>
+          
+          <div className="form-content">
+            <div className="welcome-logo">
+              <div className="logo-text">💝</div>
+            </div>
+            
+            <h2 className="form-title">My Love Language</h2>
+            <p className="form-subtitle">
+              သင်၏ချစ်ခြင်းမေတ္တာ ဖော်ပြပုံကို ရွေးချယ်ပါ
+            </p>
+            
+            <div className="love-language-grid">
+              <button 
+                className={`love-language-item ${formData.loveLanguage === 'words_of_affirmation' ? 'selected' : ''}`}
+                onClick={() => setFormData({...formData, loveLanguage: 'words_of_affirmation'})}
+              >
+                <div className="love-icon">💬</div>
+                <div className="love-title">Words of Affirmation</div>
+                <div className="love-description">ချီးမြှင့်စကားများ</div>
+              </button>
+              
+              <button 
+                className={`love-language-item ${formData.loveLanguage === 'acts_of_service' ? 'selected' : ''}`}
+                onClick={() => setFormData({...formData, loveLanguage: 'acts_of_service'})}
+              >
+                <div className="love-icon">🤝</div>
+                <div className="love-title">Acts of Service</div>
+                <div className="love-description">အကူအညီများ</div>
+              </button>
+              
+              <button 
+                className={`love-language-item ${formData.loveLanguage === 'receiving_gifts' ? 'selected' : ''}`}
+                onClick={() => setFormData({...formData, loveLanguage: 'receiving_gifts'})}
+              >
+                <div className="love-icon">🎁</div>
+                <div className="love-title">Receiving Gifts</div>
+                <div className="love-description">လက်ဆောင်များ</div>
+              </button>
+              
+              <button 
+                className={`love-language-item ${formData.loveLanguage === 'quality_time' ? 'selected' : ''}`}
+                onClick={() => setFormData({...formData, loveLanguage: 'quality_time'})}
+              >
+                <div className="love-icon">⏰</div>
+                <div className="love-title">Quality Time</div>
+                <div className="love-description">အချိန်ပေးခြင်း</div>
+              </button>
+              
+              <button 
+                className={`love-language-item ${formData.loveLanguage === 'physical_touch' ? 'selected' : ''}`}
+                onClick={() => setFormData({...formData, loveLanguage: 'physical_touch'})}
+              >
+                <div className="love-icon">🤗</div>
+                <div className="love-title">Physical Touch</div>
+                <div className="love-description">ထိတွေ့မှုများ</div>
+              </button>
+            </div>
+          </div>
+
+          <div className="form-footer">
+            <button 
+              className="next-button" 
+              onClick={() => setCurrentScreen('photoUpload')}
+              disabled={!formData.loveLanguage}
+            >
+              <span className="button-text">Next</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Photo Upload Screen
+  if (currentScreen === 'photoUpload') {
+    const handlePrivatePhotoUpload = (event) => {
+      const file = event.target.files[0]
+      if (file) {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          setFormData({...formData, privatePhoto: e.target.result})
+        }
+        reader.readAsDataURL(file)
+      }
+    }
+
+    const handlePublicPhotoUpload = (event) => {
+      console.log('📸 Starting public photo upload...', event.target.files[0])
+      const file = event.target.files[0]
+      if (file) {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          console.log('📸 Image loaded, opening crop modal...')
+          setOriginalImage(e.target.result)
+          setShowCropper(true)
+        }
+        reader.readAsDataURL(file)
+      }
+    }
+
+    // Crop handlers moved to top level for proper scope access
+
+    return (
+      <div className="app">
+        <div className="container">
+          {notification.show && (
+            <div className={`notification ${notification.type}`}>
+              <span className="notification-message">{notification.message}</span>
+              <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
+            </div>
+          )}
+          
+          <div className="form-header">
+            <button className="back-button" onClick={() => setCurrentScreen('loveLanguage')}>
+              ←
+            </button>
+            <span className="help-link">Help</span>
+          </div>
+          
+          <div className="form-content">
+            <div className="welcome-logo">
+              <div className="logo-text">Photo</div>
+            </div>
+            
+            <h2 className="form-title">ဓာတ်ပုံများ ထည့်ပါ</h2>
+            <p className="form-subtitle">
+              Member Card အတွက် သင်၏ဓာတ်ပုံများကို ထည့်သွင်းပါ
+            </p>
+            
+            <div className="photo-upload-section">
+              {/* Private Photo Section */}
+              <div className="photo-group">
+                <h3 className="photo-title">Private Photo (ကိုယ်ပိုင်ဓာတ်ပုံ)</h3>
+                <p className="photo-description">အမှန်တကယ်ကိုယ့်ပုံ - လုံခြုံရေးအတွက်သာ</p>
+                
+                <div className="photo-upload-area">
+                  {formData.privatePhoto ? (
+                    <div className="photo-preview">
+                      <img src={formData.privatePhoto} alt="Private" className="preview-image" />
+                      <button 
+                        className="change-photo-btn"
+                        onClick={() => document.getElementById('private-photo-input').click()}
+                      >
+                        ပြောင်းမယ်
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="photo-upload-label" htmlFor="private-photo-input">
+                      <div className="upload-icon">+</div>
+                      <div className="upload-text">Private Photo ထည့်ပါ</div>
+                    </label>
+                  )}
+                  <input
+                    id="private-photo-input"
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePrivatePhotoUpload}
+                    style={{ display: 'none' }}
+                  />
+                </div>
+              </div>
+
+              {/* Public Photo Section */}
+              <div className="photo-group">
+                <h3 className="photo-title">Public Photo (Member Card ပုံ)</h3>
+                <p className="photo-description">Member Card မှာ ပြမယ့်ပုံ - 2:3 ratio</p>
+                
+                <div className="photo-upload-area">
+                  {formData.publicPhoto ? (
+                    <div className="photo-preview">
+                      <img src={formData.publicPhoto} alt="Public" className="preview-image member-card-ratio" />
+                      <button 
+                        className="change-photo-btn"
+                        onClick={() => document.getElementById('public-photo-input').click()}
+                      >
+                        ပြောင်းမယ်
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="photo-upload-label member-card-format" htmlFor="public-photo-input">
+                      <div className="upload-icon">+</div>
+                      <div className="upload-text">Public Photo ထည့်ပါ</div>
+                      <div className="ratio-info">2:3 ratio</div>
+                    </label>
+                  )}
+                  <input
+                    id="public-photo-input"
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePublicPhotoUpload}
+                    style={{ display: 'none' }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Image Cropper Modal */}
+            {showCropper && originalImage && (
+              <div className="cropper-modal">
+                <div className="cropper-content">
+                  <h3>ပုံကို 2:3 ratio ဖြင့် ညှိပါ</h3>
+                  <div className="crop-container">
+                    <img 
+                      src={originalImage} 
+                      alt="Crop preview"
+                      className="crop-image"
+                      onLoad={(e) => {
+                        console.log('🖼️ Crop image loaded, setting up crop area...')
+                        const img = e.target
+                        const displayWidth = img.offsetWidth
+                        const displayHeight = img.offsetHeight
+                        
+                        console.log('📐 Display dimensions:', { width: displayWidth, height: displayHeight })
+                        
+                        setImageDisplaySize({ width: displayWidth, height: displayHeight })
+                        
+                        // Calculate 2:3 ratio crop area (width:height = 2:3)
+                        const targetRatio = 2/3 // width/height ratio
+                        let cropWidth, cropHeight
+                        
+                        if (displayWidth / displayHeight > targetRatio) {
+                          // Image is wider than 2:3, limit by height
+                          cropHeight = displayHeight * 0.6 // Use 60% of height for better interaction
+                          cropWidth = cropHeight * targetRatio
+                        } else {
+                          // Image is taller than 2:3, limit by width  
+                          cropWidth = displayWidth * 0.6 // Use 60% of width for better interaction
+                          cropHeight = cropWidth / targetRatio
+                        }
+                        
+                        // Center the crop area
+                        const cropX = (displayWidth - cropWidth) / 2
+                        const cropY = (displayHeight - cropHeight) / 2
+                        
+                        setCropData({
+                          x: cropX,
+                          y: cropY,
+                          width: cropWidth,
+                          height: cropHeight
+                        })
+                        
+                        console.log('✅ Crop Area Set:', {
+                          display: { width: displayWidth, height: displayHeight },
+                          crop: { x: cropX, y: cropY, width: cropWidth, height: cropHeight },
+                          ratio: cropWidth / cropHeight
+                        })
+                      }}
+                    />
+                    
+                    {/* Interactive Crop Overlay */}
+                    <div 
+                      className="crop-overlay"
+                      style={{
+                        left: `${cropData.x}px`,
+                        top: `${cropData.y}px`,
+                        width: `${cropData.width}px`,
+                        height: `${cropData.height}px`,
+                        cursor: isDragging ? 'grabbing' : 'grab'
+                      }}
+                      onMouseDown={handleCropMouseDown}
+                      onTouchStart={handleCropTouchStart}
+                    >
+                      {/* Drag Handle */}
+                      <div className="crop-drag-handle">
+                        <span>⋮⋮</span>
+                      </div>
+                      
+                      {/* Resize Handles */}
+                      <div 
+                        className="crop-resize-handle top-left"
+                        onMouseDown={(e) => handleResizeStart(e, 'top-left')}
+                        onTouchStart={(e) => handleResizeStart(e, 'top-left')}
+                      />
+                      <div 
+                        className="crop-resize-handle top-right"
+                        onMouseDown={(e) => handleResizeStart(e, 'top-right')}
+                        onTouchStart={(e) => handleResizeStart(e, 'top-right')}
+                      />
+                      <div 
+                        className="crop-resize-handle bottom-left"
+                        onMouseDown={(e) => handleResizeStart(e, 'bottom-left')}
+                        onTouchStart={(e) => handleResizeStart(e, 'bottom-left')}
+                      />
+                      <div 
+                        className="crop-resize-handle bottom-right"
+                        onMouseDown={(e) => handleResizeStart(e, 'bottom-right')}
+                        onTouchStart={(e) => handleResizeStart(e, 'bottom-right')}
+                      />
+                    </div>
+                  </div>
+                  <div className="crop-controls">
+                    <button className="crop-btn cancel" onClick={() => {
+                      setShowCropper(false)
+                      setOriginalImage(null)
+                    }}>
+                      ပယ်ဖျက်မယ်
+                    </button>
+                    <button className="crop-btn confirm" onClick={handleCropComplete}>
+                      အတည်ပြုမယ်
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <canvas ref={canvasRef} style={{ display: 'none' }} />
+          </div>
+
+          <div className="form-footer">
+            <button 
+              className="next-button" 
+              onClick={handleCompleteMemberCard}
+              disabled={!formData.privatePhoto || !formData.publicPhoto}
+            >
+              <span className="button-text">Complete Member Card</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Existing User Login Screen
+  if (currentScreen === 'existingUserLogin') {
+    return (
+      <div className="app">
+        <div className="container">
+          {notification.show && (
+            <div className={`notification ${notification.type}`}>
+              <span className="notification-message">{notification.message}</span>
+              <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          <div className="form-header">
+            <button className="back-button" onClick={() => setCurrentScreen('contact')}>
+              ←
+            </button>
+            <span className="help-link">Help</span>
+          </div>
+          
+          <div className="form-content">
+            <div className="welcome-logo">
+              <div className="logo-text">🔑</div>
+            </div>
+            
+            <h2 className="form-title">အကောင့်ရှိပြီးပါပြီး</h2>
+            <p className="form-subtitle">
+              ဒီအီးမေးလ်/ဖုန်းနံပါတ်ဖြင့် အကောင့်ရှိပြီး Member Card လဲ ပြုလုပ်ပြီးပါပြီး
+            </p>
+            
+            <div className="existing-user-card">
+              <div className="user-info">
+                <h3>Account Information</h3>
+                <p>📧 {formData.email}</p>
+                <p>📱 {formData.phoneNumber}</p>
+                <div className="status-badge">
+                  <span className="badge completed">✓ Member Card Completed</span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="login-options">
+              <p className="login-instruction">
+                UC ERA app တွင် login လုပ်ရန် သင်၏ UC ERA mobile app ကို အသုံးပြုပါ။
+              </p>
+            </div>
+          </div>
+
+          <div className="form-footer">
+            <button 
+              className="next-button" 
+              onClick={() => showNotification('UC ERA Mobile App ကို download လုပ်ပြီး login လုပ်ပါ! 📱', 'info')}
+            >
+              <span className="button-text">Go to Login</span>
+            </button>
+            
+            <button 
+              className="secondary-button" 
+              onClick={() => setCurrentScreen('welcome')}
+            >
+              <span className="button-text">နောက်အကောင့်ဖွင့်မယ်</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Add debug logging
+  return (
+    <div className="app">
+      <div className="container">
+        {notification.show && (
+          <div className={`notification ${notification.type}`}>
+            <span className="notification-message">{notification.message}</span>
+            <button className="notification-close" onClick={closeNotification}>×</button>
+          </div>
+        )}
+        
+        {screenLoading && (
+          <div className="screen-loading-overlay">
+            <CubeLoader message={loadingMessage} />
           </div>
         )}
         
@@ -1446,7 +3226,9 @@ function App() {
             onClick={handleJoinUCEra}
             disabled={isLoading}
           >
+              <span className="button-text">
             {isLoading ? 'Please wait...' : 'Join UC Era'}
+              </span>
           </button>
           <p className="login-link" onClick={handleLogIn}>
             Log In

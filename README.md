@@ -13,6 +13,9 @@ UC ERA is a comprehensive 7-step registration system that respects Myanmar cultu
 - **🗄️ Real-time Database**: Appwrite cloud backend with instant data persistence
 - **☁️ Cloud Functions**: Serverless email delivery system deployed and working
 - **🔐 Complete Security**: OTP verification, passcode setup, attempt limiting
+- **🍽️ Multi-Selection System**: Choose multiple favorite foods and artists with custom input support
+- **🎨 Advanced Member Card**: Interactive card design with Myanmar cultural preferences
+- **🏷️ Smart Tag Management**: Beautiful tag display with easy removal functionality
 - **📱 Modern UI/UX**: Responsive React application with beautiful design
 - **🚀 Production Ready**: Full deployment, monitoring, and error handling
 

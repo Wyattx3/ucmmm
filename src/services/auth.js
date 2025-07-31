@@ -1,4 +1,5 @@
 import { account, databases, functions, DATABASE_ID, COLLECTIONS, ID, Query } from '../lib/appwrite.js';
+import storageService from './storage.js';
 
 class AuthService {
     // Generate unique 7-digit Member ID
@@ -124,13 +125,78 @@ class AuthService {
         try {
             console.log('📞 Registering contact info for user:', userId);
             
+            const emailLower = contactData.email.toLowerCase();
+            const fullPhoneNumber = `${contactData.countryCode}${contactData.phoneNumber.replace(/\D/g, '')}`;
+            
+            // Check for duplicate email
+            console.log('🔍 Checking for duplicate email:', emailLower);
+            try {
+                const existingEmailUsers = await databases.listDocuments(
+                    DATABASE_ID,
+                    COLLECTIONS.USERS,
+                    [
+                        Query.equal('email', emailLower),
+                        Query.notEqual('$id', userId) // Exclude current user
+                    ]
+                );
+                
+                if (existingEmailUsers.documents.length > 0) {
+                    const existingUser = existingEmailUsers.documents[0];
+                    // Return existing user info instead of throwing generic error
+                    throw new Error(JSON.stringify({
+                        type: 'EXISTING_USER',
+                        userId: existingUser.$id,
+                        email: existingUser.email,
+                        hasMemberCard: existingUser.hasMemberCard || false,
+                        isEmailDuplicate: true
+                    }));
+                }
+            } catch (queryError) {
+                if (queryError.message.includes('အီးမေးလ်ကို အခြားအကောင့်')) {
+                    throw queryError; // Re-throw our custom error
+                }
+                console.warn('⚠️ Could not check email duplicates:', queryError.message);
+            }
+            
+            // Check for duplicate phone number
+            console.log('🔍 Checking for duplicate phone number:', fullPhoneNumber);
+            try {
+                const existingPhoneUsers = await databases.listDocuments(
+                    DATABASE_ID,
+                    COLLECTIONS.USERS,
+                    [
+                        Query.equal('phoneNumber', contactData.phoneNumber.replace(/\D/g, '')),
+                        Query.equal('countryCode', contactData.countryCode || '+95'),
+                        Query.notEqual('$id', userId) // Exclude current user
+                    ]
+                );
+                
+                if (existingPhoneUsers.documents.length > 0) {
+                    const existingUser = existingPhoneUsers.documents[0];
+                    // Return existing user info instead of throwing generic error
+                    throw new Error(JSON.stringify({
+                        type: 'EXISTING_USER',
+                        userId: existingUser.$id,
+                        phoneNumber: existingUser.phoneNumber,
+                        hasMemberCard: existingUser.hasMemberCard || false,
+                        isPhoneDuplicate: true
+                    }));
+                }
+            } catch (queryError) {
+                if (queryError.message.includes('ဖုန်းနံပါတ်ကို အခြားအကောင့်')) {
+                    throw queryError; // Re-throw our custom error
+                }
+                console.warn('⚠️ Could not check phone duplicates:', queryError.message);
+            }
+            
+            // If no duplicates found, proceed with registration
             const updatedUser = await databases.updateDocument(
                 DATABASE_ID,
                 COLLECTIONS.USERS,
                 userId,
                 {
-                    email: contactData.email.toLowerCase(),
-                    phoneNumber: contactData.phoneNumber,
+                    email: emailLower,
+                    phoneNumber: contactData.phoneNumber.replace(/\D/g, ''), // Store clean number
                     countryCode: contactData.countryCode || '+95',
                     registrationStep: 3
                 }
@@ -147,7 +213,19 @@ class AuthService {
             };
         } catch (error) {
             console.error('❌ Error registering contact:', error);
-            throw new Error('Failed to register contact: ' + error.message);
+            
+            // Handle Appwrite database errors
+            if (error.code === 409 || error.message.includes('Document with the requested ID already exists')) {
+                throw new Error('ဒီအချက်အလက်များကို အခြားအကောင့်တစ်ခုမှာ အသုံးပြုပြီးသားပါ။');
+            }
+            
+            // Re-throw our custom error messages
+            if (error.message.includes('အီးမေးလ်ကို အခြားအကောင့်') || 
+                error.message.includes('ဖုန်းနံပါတ်ကို အခြားအကောင့်')) {
+                throw error;
+            }
+            
+            throw new Error('Contact information ကို register လုပ်ရာတွင် အမှားတစ်ခုဖြစ်ပေါ်ခဲ့သည်: ' + error.message);
         }
     }
 
@@ -418,6 +496,152 @@ class AuthService {
         }
     }
 
+    // Complete Member Card Application
+    async completeMemberCard(userId, memberCardData) {
+        try {
+            console.log('🎴 Completing member card for user:', userId);
+            console.log('🎴 Member card data received:', memberCardData);
+            
+            // Upload photos to Appwrite Storage
+            let privatePhotoData = null;
+            let publicPhotoData = null;
+            
+            if (memberCardData.privatePhoto) {
+                console.log('📸 Processing private photo...');
+                const compressedPrivate = await storageService.processPhotoForUpload(
+                    memberCardData.privatePhoto, 
+                    512, // 512KB max
+                    0.8  // 80% quality
+                );
+                privatePhotoData = await storageService.uploadPrivatePhoto(userId, compressedPrivate);
+            }
+            
+            if (memberCardData.publicPhoto) {
+                console.log('📸 Processing public photo...');
+                const compressedPublic = await storageService.processPhotoForUpload(
+                    memberCardData.publicPhoto,
+                    1024, // 1MB max  
+                    0.9   // 90% quality (higher quality for member card)
+                );
+                publicPhotoData = await storageService.uploadPublicPhoto(userId, compressedPublic);
+            }
+            
+            // Update user with member card data and mark as completed
+            const updateData = {
+                relationshipStatus: memberCardData.relationshipStatus,
+                gender: memberCardData.gender,
+                favoriteFood: memberCardData.favoriteFood,
+                favoriteArtist: memberCardData.favoriteArtist,
+                loveLanguage: memberCardData.loveLanguage,
+                hasMemberCard: true,
+                memberCardCompletedAt: new Date().toISOString()
+            };
+
+            // Add photo data if uploaded successfully
+            if (privatePhotoData) {
+                updateData.privatePhotoId = privatePhotoData.fileId;
+                updateData.privatePhotoUrl = privatePhotoData.url;
+                updateData.privatePhotoSize = privatePhotoData.size;
+                console.log('📸 Private photo data added to update:', privatePhotoData);
+            }
+            
+            if (publicPhotoData) {
+                updateData.publicPhotoId = publicPhotoData.fileId;
+                updateData.publicPhotoUrl = publicPhotoData.url;
+                updateData.publicPhotoSize = publicPhotoData.size;
+                console.log('📸 Public photo data added to update:', publicPhotoData);
+            }
+
+            // Include name updates if provided (for existing users who edited names)
+            if (memberCardData.firstName) {
+                updateData.firstName = memberCardData.firstName;
+            }
+            if (memberCardData.middleName !== undefined) {
+                updateData.middleName = memberCardData.middleName;
+            }
+            if (memberCardData.lastName) {
+                updateData.lastName = memberCardData.lastName;
+            }
+
+            console.log('📝 Final update data being sent to database:', updateData);
+            
+            const updatedUser = await databases.updateDocument(
+                DATABASE_ID,
+                COLLECTIONS.USERS,
+                userId,
+                updateData
+            );
+            
+            console.log('✅ Member card completed successfully');
+            console.log('📄 Updated user document:', updatedUser);
+            return {
+                success: true,
+                data: updatedUser
+            };
+        } catch (error) {
+            console.error('❌ Error completing member card:', error);
+            throw new Error('Member card completion failed: ' + error.message);
+        }
+    }
+
+    // Check for duplicate email and phone number
+    async checkDuplicateContact(contactData) {
+        try {
+            console.log('🔍 Checking for duplicate contact info');
+            const emailLower = contactData.email.toLowerCase();
+            const cleanPhone = contactData.phoneNumber.replace(/\D/g, '');
+            
+            // Check for duplicate email
+            const existingEmailUsers = await databases.listDocuments(
+                DATABASE_ID,
+                COLLECTIONS.USERS,
+                [Query.equal('email', emailLower)]
+            );
+            
+            if (existingEmailUsers.documents.length > 0) {
+                const existingUser = existingEmailUsers.documents[0];
+                console.log('📧 Found existing user with email:', emailLower);
+                // Return existing user info instead of throwing generic error
+                throw new Error(JSON.stringify({
+                    type: 'EXISTING_USER',
+                    userId: existingUser.$id,
+                    email: existingUser.email,
+                    hasMemberCard: existingUser.hasMemberCard || false,
+                    isEmailDuplicate: true
+                }));
+            }
+            
+            // Check for duplicate phone number
+            const existingPhoneUsers = await databases.listDocuments(
+                DATABASE_ID,
+                COLLECTIONS.USERS,
+                [
+                    Query.equal('phoneNumber', cleanPhone),
+                    Query.equal('countryCode', contactData.countryCode || '+95')
+                ]
+            );
+            
+            if (existingPhoneUsers.documents.length > 0) {
+                const existingUser = existingPhoneUsers.documents[0];
+                console.log('📱 Found existing user with phone:', cleanPhone);
+                // Return existing user info instead of throwing generic error
+                throw new Error(JSON.stringify({
+                    type: 'EXISTING_USER',
+                    userId: existingUser.$id,
+                    phoneNumber: existingUser.phoneNumber,
+                    hasMemberCard: existingUser.hasMemberCard || false,
+                    isPhoneDuplicate: true
+                }));
+            }
+            
+            console.log('✅ No duplicates found');
+            return { success: true, message: 'Contact information is available' };
+        } catch (error) {
+            console.error('❌ Error checking duplicates:', error);
+            throw error;
+        }
+    }
+
     // Get user data
     async getUser(userId) {
         try {
@@ -430,6 +654,62 @@ class AuthService {
         } catch (error) {
             console.error('❌ Error getting user:', error);
             throw new Error('Failed to get user: ' + error.message);
+        }
+    }
+
+    // Update user names only (for name editing)
+    async updateUserNames(userId, nameData) {
+        try {
+            console.log('📝 Updating user names:', userId, nameData);
+            
+            const updatedUser = await databases.updateDocument(
+                DATABASE_ID,
+                COLLECTIONS.USERS,
+                userId,
+                {
+                    firstName: nameData.firstName,
+                    middleName: nameData.middleName || '',
+                    lastName: nameData.lastName
+                }
+            );
+            
+            console.log('✅ User names updated successfully');
+            return {
+                success: true,
+                user: updatedUser
+            };
+        } catch (error) {
+            console.error('❌ Error updating user names:', error);
+            throw new Error('Name update failed: ' + error.message);
+        }
+    }
+
+    // Verify existing user passcode
+    async verifyExistingUserPasscode(userId, passcode) {
+        try {
+            console.log('🔐 Verifying existing user passcode for:', userId);
+            
+            const user = await databases.getDocument(
+                DATABASE_ID,
+                COLLECTIONS.USERS,
+                userId
+            );
+            
+            // Compare with stored passcode (Base64 encoded)
+            const encodedInputPasscode = btoa(passcode);
+            
+            if (user.passcode !== encodedInputPasscode) {
+                throw new Error('Passcode မမှန်ကန်ပါ။ ကြိုးစားပြန်ကြည့်ပါ။');
+            }
+            
+            console.log('✅ Existing user passcode verified successfully');
+            return {
+                success: true,
+                user: user
+            };
+        } catch (error) {
+            console.error('❌ Error verifying existing user passcode:', error);
+            throw error;
         }
     }
 

@@ -1,4 +1,4 @@
-import { Client, Account, Databases, Functions, ID, Query } from 'appwrite';
+import { Client, Account, Databases, Functions, Storage, ID, Query, Permission, Role } from 'appwrite';
 
 // Appwrite configuration
 const client = new Client()
@@ -9,6 +9,7 @@ const client = new Client()
 export const account = new Account(client);
 export const databases = new Databases(client);
 export const functions = new Functions(client);
+export const storage = new Storage(client);
 
 // Database and Collection IDs
 export const DATABASE_ID = 'ucera-main';
@@ -20,8 +21,14 @@ export const COLLECTIONS = {
     CITIES: 'cities'
 };
 
+// Storage Bucket IDs (Optimized for Free Plan - Single Bucket)
+export const STORAGE_BUCKETS = {
+    PRIVATE_PHOTOS: 'private-photos',
+    PUBLIC_PHOTOS: 'private-photos'  // Same bucket, different file-level permissions
+};
+
 // Helper to generate unique IDs and Query objects
-export { ID, Query };
+export { ID, Query, Permission, Role };
 
 // Export client for direct access if needed
 export default client; 

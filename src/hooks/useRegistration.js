@@ -36,6 +36,13 @@ export const useRegistration = () => {
         }
     };
 
+    // Check for duplicate email and phone before registration
+    const checkDuplicateContact = async (contactData) => {
+        return handleApiCall(async () => {
+            return await authService.checkDuplicateContact(contactData);
+        }, 'Duplicate check completed');
+    };
+
     // Step 1: Register Names
     const registerNames = async (nameData) => {
         return handleApiCall(async () => {
@@ -174,6 +181,9 @@ export const useRegistration = () => {
         registerCity,
         getUserData,
         resetRegistration,
+        checkDuplicateContact,
+        verifyExistingUserPasscode: (userId, passcode) => authService.verifyExistingUserPasscode(userId, passcode),
+        completeMemberCard: (userId, memberCardData) => authService.completeMemberCard(userId, memberCardData),
         
         // Helpers
         setError: (err) => setError(err)

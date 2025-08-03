@@ -1,12 +1,13 @@
 {
-  "name": "facebook-auth",
+  "name": "generate-member-card",
   "version": "1.0.0",
-  "description": "Facebook authentication handler for UC ERA",
+  "description": "Generate member card using Placid API with zodiac calculation",
   "main": "src/main.js",
   "scripts": {
     "start": "node src/main.js"
   },
   "dependencies": {
+    "axios": "^1.6.0",
     "node-appwrite": "^13.0.0"
   }
 }

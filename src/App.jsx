@@ -3,11 +3,11 @@ import './App.css'
 import { useRegistration } from './hooks/useRegistration'
 import CubeLoader from './components/CubeLoader'
 import MemberCard from './components/MemberCard'
-import FacebookButton from './components/FacebookButton'
+import EyeLoader from './components/EyeLoader'
 import authService from './services/auth.js'
 
 function App() {
-  const [currentScreen, setCurrentScreen] = useState('welcome') // 'welcome', 'registration', 'dateOfBirth', 'contact', 'verification', 'success', 'passcode', 'passcodeConfirm', 'citizenship', 'city', 'finalSuccess', 'memberCardApplication', 'nameConfirmation', 'relationshipStatus', 'genderSelection', 'favoriteFood', 'favoriteArtist', 'loveLanguage', 'photoUpload', 'facebookAuth', 'facebookSuccess', 'existingUserPasscode', 'existingUserLogin'
+  const [currentScreen, setCurrentScreen] = useState('welcome') // 'welcome', 'registration', 'dateOfBirth', 'contact', 'verification', 'success', 'passcode', 'passcodeConfirm', 'citizenship', 'city', 'finalSuccess', 'memberCardApplication', 'nameConfirmation', 'relationshipStatus', 'genderSelection', 'favoriteFood', 'favoriteArtist', 'loveLanguage', 'photoUpload', 'existingUserPasscode', 'existingUserLogin'
   
   // Use registration hook for real API calls
   const {
@@ -27,50 +27,7 @@ function App() {
     checkDuplicateContact
   } = useRegistration()
 
-  // Handle Facebook OAuth callback
-  useEffect(() => {
-    const handleFacebookCallback = async () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const path = window.location.pathname;
-      
-      if (path === '/auth/facebook/success' && currentUserId) {
-        try {
-          showScreenLoading('Facebook ချိတ်ဆက်မှု လုပ်ဆောင်နေပါသည်...');
-          
-          // Get Facebook user data from Appwrite session
-          const session = await authService.getCurrentSession();
-          if (session && session.provider === 'facebook') {
-            const facebookData = {
-              id: session.providerUid,
-              name: session.providerEmail || session.providerUid,
-              email: session.providerEmail
-            };
-            
-            // Process Facebook authentication
-            await authService.handleFacebookCallback(currentUserId, facebookData);
-            
-            hideScreenLoading();
-            setCurrentScreen('facebookSuccess');
-            showNotification('Facebook ချိတ်ဆက်မှု အောင်မြင်ပါပြီ! 🎉', 'success');
-            
-            // Clear URL parameters
-            window.history.replaceState({}, document.title, window.location.pathname);
-          }
-        } catch (error) {
-          hideScreenLoading();
-          console.error('Facebook callback error:', error);
-          showNotification('Facebook ချိတ်ဆက်မှုတွင် အမှားရှိပါသည်', 'error');
-          setCurrentScreen('facebookAuth');
-        }
-      } else if (path === '/auth/facebook/failure') {
-        showNotification('Facebook ချိတ်ဆက်မှု မအောင်မြင်ပါ', 'error');
-        setCurrentScreen('facebookAuth');
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
-    };
 
-    handleFacebookCallback();
-  }, [currentUserId]);
 
   const [selectedCountry, setSelectedCountry] = useState({
     code: '+95',
@@ -117,8 +74,170 @@ function App() {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 })
   const [imageDisplaySize, setImageDisplaySize] = useState({ width: 0, height: 0 })
+  const [memberCardGenerating, setMemberCardGenerating] = useState(false)
+  const [generatedMemberCard, setGeneratedMemberCard] = useState(null)
   const passcodeInputRefs = useRef([])
   const canvasRef = useRef(null)
+
+  // Function to create member card with PNG template using Canvas
+  const createMemberCardWithPngTemplate = async (templateData) => {
+    try {
+      console.log('🖼️ Starting PNG template member card creation...')
+      console.log('📊 Template data:', templateData)
+      
+      // Create canvas with template dimensions
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      canvas.width = templateData.canvasSize.width
+      canvas.height = templateData.canvasSize.height
+      
+      // Load the template image
+      const templateImg = new Image()
+      templateImg.crossOrigin = 'anonymous'
+      
+      return new Promise((resolve) => {
+        templateImg.onload = async () => {
+          console.log('✅ Template image loaded')
+          
+          // Draw the template background
+          ctx.drawImage(templateImg, 0, 0, canvas.width, canvas.height)
+          
+          // Load and draw user photo if available
+          if (templateData.photoUrl) {
+            console.log('📷 Loading user photo:', templateData.photoUrl)
+            try {
+              const userImg = new Image()
+              userImg.crossOrigin = 'anonymous'
+              
+              await new Promise((photoResolve) => {
+                userImg.onload = () => {
+                  console.log('✅ User photo loaded')
+                  
+                  // Draw user photo with rounded corners
+                  const photo = templateData.positions.photo
+                  console.log('🎨 Drawing user photo at:', photo)
+                  
+                  // Save context for rounded rectangle
+                  ctx.save()
+                  
+                  // Create rounded rectangle path for clipping (manual implementation)
+                  ctx.beginPath()
+                  const r = photo.borderRadius
+                  ctx.moveTo(photo.x + r, photo.y)
+                  ctx.arcTo(photo.x + photo.width, photo.y, photo.x + photo.width, photo.y + r, r)
+                  ctx.arcTo(photo.x + photo.width, photo.y + photo.height, photo.x + photo.width - r, photo.y + photo.height, r)
+                  ctx.arcTo(photo.x, photo.y + photo.height, photo.x, photo.y + photo.height - r, r)
+                  ctx.arcTo(photo.x, photo.y, photo.x + r, photo.y, r)
+                  ctx.closePath()
+                  ctx.clip()
+                  
+                  // Draw user photo to fit the rectangle
+                  ctx.drawImage(userImg, photo.x, photo.y, photo.width, photo.height)
+                  console.log('✅ User photo drawn successfully')
+                  
+                  // Restore context
+                  ctx.restore()
+                  
+                  photoResolve()
+                }
+                userImg.onerror = () => {
+                  console.log('⚠️ Failed to load user photo')
+                  photoResolve()
+                }
+                userImg.src = templateData.photoUrl
+              })
+            } catch (photoError) {
+              console.log('⚠️ Photo loading error:', photoError)
+            }
+          }
+          
+          // Draw member name with your exact specifications
+          const namePos = templateData.positions.name
+          ctx.fillStyle = namePos.color
+          ctx.font = `${namePos.fontWeight || 'normal'} ${namePos.fontSize}px ${namePos.fontFamily}, Arial, sans-serif`
+          ctx.textAlign = 'center'
+          console.log('🎨 Drawing member name:', templateData.userName, 'at position:', namePos)
+          // Center align: x position + half of width
+          const centerX = namePos.x + (namePos.width / 2)
+          ctx.fillText(templateData.userName, centerX, namePos.y)
+          
+          // Draw member ID with your exact specifications  
+          const idPos = templateData.positions.memberId
+          ctx.fillStyle = idPos.color
+          ctx.font = `${idPos.fontWeight || 'normal'} ${idPos.fontSize}px ${idPos.fontFamily}, Arial, sans-serif`
+          ctx.textAlign = 'left'
+          console.log('🆔 Drawing member ID:', templateData.memberId, 'at position:', idPos)
+          ctx.fillText(templateData.memberId, idPos.x, idPos.y)
+          
+          // Convert to data URL
+          const dataUrl = canvas.toDataURL('image/png', 0.9)
+          
+          console.log('✅ PNG template member card creation completed')
+          resolve(dataUrl)
+        }
+        
+        templateImg.onerror = () => {
+          console.error('❌ Failed to load template image')
+          resolve(null)
+        }
+        
+        // Load template from local templates folder
+        console.log('📁 Loading template:', `/templates/${templateData.templateFile}`)
+        templateImg.src = `/templates/${templateData.templateFile}`
+      })
+      
+    } catch (error) {
+      console.error('❌ PNG template member card creation failed:', error)
+      return null
+    }
+  }
+
+  // Function to convert HTML to image using canvas
+  const convertHtmlToImage = async (htmlString) => {
+    try {
+      console.log('🖼️ Starting HTML to image conversion...')
+      
+      // Create a temporary div to render the HTML
+      const tempDiv = document.createElement('div')
+      tempDiv.innerHTML = htmlString
+      tempDiv.style.position = 'absolute'
+      tempDiv.style.left = '-9999px'
+      tempDiv.style.top = '-9999px'
+      tempDiv.style.width = '576px'
+      tempDiv.style.height = '384px'
+      
+      document.body.appendChild(tempDiv)
+      
+      // Wait for fonts and images to load
+      await new Promise(resolve => setTimeout(resolve, 3000))
+      
+      // Use html2canvas to convert to image
+      const html2canvas = (await import('html2canvas')).default
+      
+      const canvas = await html2canvas(tempDiv, {
+        width: 576,
+        height: 384,
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: null,
+        logging: false
+      })
+      
+      // Clean up
+      document.body.removeChild(tempDiv)
+      
+      // Convert canvas to blob URL
+      const dataUrl = canvas.toDataURL('image/png', 0.9)
+      
+      console.log('✅ HTML to image conversion completed')
+      return dataUrl
+      
+    } catch (error) {
+      console.error('❌ HTML to image conversion failed:', error)
+      return null
+    }
+  }
 
   // Interactive Crop Effect (MUST be at top level for React Rules of Hooks)
   useEffect(() => {
@@ -127,7 +246,7 @@ function App() {
       return
     }
 
-    console.log('🎯 Setting up move handlers:', { isDragging, isResizing })
+          // console.log('🎯 Setting up move handlers:', { isDragging, isResizing })
 
     const handleMove = (e) => {
       const clientX = e.touches ? e.touches[0].clientX : e.clientX
@@ -155,7 +274,7 @@ function App() {
       }
       
       if (isResizing) {
-        console.log('🔍 Resizing...', { clientX, clientY, resizeStart, corner: isResizing })
+        // console.log('🔍 Resizing...', { clientX, clientY, resizeStart, corner: isResizing })
         const deltaX = clientX - resizeStart.mouseX
         const deltaY = clientY - resizeStart.mouseY
         
@@ -164,7 +283,7 @@ function App() {
         let newX = cropData.x
         let newY = cropData.y
         
-        console.log('📏 Deltas:', { deltaX, deltaY })
+        // console.log('📏 Deltas:', { deltaX, deltaY })
         
         // Calculate new dimensions while maintaining 2:3 ratio
         if (isResizing.includes('right')) {
@@ -198,7 +317,7 @@ function App() {
           newX = resizeStart.x - (newWidth - resizeStart.width)
         }
         
-        console.log('📐 Before constraints:', { newWidth, newHeight, newX, newY })
+        // console.log('📐 Before constraints:', { newWidth, newHeight, newX, newY })
         
         // Constrain to image bounds
         const minSize = 50
@@ -219,7 +338,7 @@ function App() {
         newX = Math.max(0, Math.min(newX, imageDisplaySize.width - newWidth))
         newY = Math.max(0, Math.min(newY, imageDisplaySize.height - newHeight))
         
-        console.log('✅ Final dimensions:', { newWidth, newHeight, newX, newY })
+        // console.log('✅ Final dimensions:', { newWidth, newHeight, newX, newY })
         
         setCropData({
           x: newX,
@@ -231,7 +350,7 @@ function App() {
     }
 
     const handleEnd = () => {
-      console.log('🏁 Drag/resize ended')
+              // console.log('🏁 Drag/resize ended')
       setIsDragging(false)
       setIsResizing(false)
     }
@@ -1255,33 +1374,132 @@ function App() {
       console.log('✅ Member Card completion result:', result)
       
       hideScreenLoading(true) // Immediate hide for smooth transition
-      showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! UC ERA သို့ welcome! ✨', 'success')
       
-      // Optional: Reset to welcome or redirect to login
-      setTimeout(() => {
-        setCurrentScreen('welcome')
-        // Reset form data
-        setFormData({
-          firstName: '',
-          middleName: '',
-          lastName: '',
-          dateOfBirth: '',
-          email: '',
-          phoneNumber: '',
-          relationshipStatus: '',
-          gender: '',
-          favoriteFood: [],
-          favoriteArtist: [],
-          loveLanguage: '',
-          privatePhoto: null,
-          publicPhoto: null,
-          userId: null
-        })
-      }, 3000)
+      // Start member card generation
+      setMemberCardGenerating(true)
+      setCurrentScreen('memberCardSuccess')
+      
+      // Generate member card using cloud function
+      try {
+        console.log('🎨 Starting member card generation...')
+        console.log('🎨 Sending userId:', userId)
+        
+        const requestBody = JSON.stringify({ userId })
+        console.log('🎨 Request body:', requestBody)
+        console.log('🎨 Request body length:', requestBody.length)
+        
+        // Use Appwrite SDK for function execution instead of direct HTTP
+        const { Client, Functions } = await import('appwrite')
+        const client = new Client()
+          .setEndpoint(import.meta.env.VITE_APPWRITE_ENDPOINT)
+          .setProject(import.meta.env.VITE_APPWRITE_PROJECT_ID)
+        
+        const functions = new Functions(client)
+        
+        const response = await functions.createExecution(
+          'generate-member-card',
+          JSON.stringify({ userId }),
+          false // sync execution
+        )
+        
+        console.log('🎨 Member card generation result:', response)
+        console.log('🎨 Response status:', response.status)
+        console.log('🎨 Response body type:', typeof response.responseBody)
+        console.log('🎨 Response body content:', response.responseBody)
+        
+        // Check execution status first
+        if (response.status !== 'completed') {
+          console.error('❌ Execution status:', response.status)
+          console.error('❌ Execution errors:', response.errors)
+          console.error('❌ Full response:', response)
+          throw new Error(`Function execution failed: ${response.status}`)
+        }
+        
+        const cardResult = response
+        
+        if (cardResult.responseBody) {
+          let parsedResult
+          try {
+            // Parse the response body if it's a string
+            parsedResult = typeof cardResult.responseBody === 'string' 
+              ? JSON.parse(cardResult.responseBody) 
+              : cardResult.responseBody
+          } catch (parseError) {
+            console.error('❌ Failed to parse response body:', parseError)
+            console.log('Raw response body:', cardResult.responseBody)
+            throw new Error('Invalid response format from cloud function')
+          }
+          
+          console.log('🎨 Parsed result:', parsedResult)
+          
+          if (parsedResult.success) {
+            // Check if response contains PNG template data (new approach)
+            if (parsedResult.data && parsedResult.data.templateFile) {
+              console.log('🎨 Creating member card with PNG template...')
+              
+              // Create member card using Canvas with actual PNG template
+              const imageUrl = await createMemberCardWithPngTemplate(parsedResult.data)
+              
+              const memberCardData = {
+                ...parsedResult.data,
+                imageUrl: imageUrl
+              }
+              
+              setGeneratedMemberCard(memberCardData)
+              showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! ✨ (PNG Template)', 'success')
+            } else if (parsedResult.data && parsedResult.data.html) {
+              console.log('🎨 Converting HTML to image...')
+              
+              // Convert HTML to image using canvas
+              const imageUrl = await convertHtmlToImage(parsedResult.data.html)
+              
+              const memberCardData = {
+                ...parsedResult.data,
+                imageUrl: imageUrl
+              }
+              
+              setGeneratedMemberCard(memberCardData)
+              showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! ✨ (Template Based)', 'success')
+            } else {
+              // Use debug data if this is test function, otherwise use actual data
+              setGeneratedMemberCard(parsedResult.data || parsedResult.debug)
+              showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! ✨', 'success')
+            }
+          } else {
+            throw new Error(parsedResult.message || 'Member card generation failed')
+          }
+        } else {
+          console.error('❌ No response body. Full response:', cardResult)
+          throw new Error('No response body received from cloud function')
+        }
+        
+      } catch (cardError) {
+        console.error('❌ Member card generation error:', cardError)
+        showNotification(`Member Card generation error: ${cardError.message}`, 'error')
+      } finally {
+        setMemberCardGenerating(false)
+      }
       
     } catch (error) {
       hideScreenLoading()
-      showNotification(error.message || 'Member Card ပြုလုပ်ရာတွင် အမှားတစ်ခု ဖြစ်ပွားခဲ့သည်', 'error')
+      setMemberCardGenerating(false)
+
+      console.error('❌ Member Card completion error:', error)
+      
+      // Check if it's a duplicate contact error
+      if (error.message && error.message.includes('duplicate')) {
+        setCurrentScreen('existingUserLogin')
+        return
+      }
+      
+      let errorMessage = '❌ Member Card ပြုလုပ်ရာတွင် အမှားရှိပါသည်'
+      if (error.message.includes('Photo upload')) {
+        errorMessage = '📸 ဓာတ်ပုံ upload ပြဿနာရှိပါသည်'
+      } else if (error.message.includes('User not found')) {
+        errorMessage = '👤 အသုံးပြုသူ မတွေ့ရှိပါ။ ပြန်လည် စတင်ပါ။'
+      }
+      
+      showNotification(errorMessage, 'error')
     }
   }
 
@@ -3185,142 +3403,111 @@ function App() {
           <div className="form-footer">
             <button 
               className="next-button" 
-              onClick={() => {
-                if (!formData.privatePhoto || !formData.publicPhoto) {
-                  showNotification('ဓာတ်ပုံ နှစ်ပုံလုံး ထည့်ပါ', 'error');
-                  return;
-                }
-                setCurrentScreen('facebookAuth');
-              }}
-              disabled={!formData.privatePhoto || !formData.publicPhoto}
-            >
-              <span className="button-text">Next</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Facebook Authentication Screen
-  if (currentScreen === 'facebookAuth') {
-    return (
-      <div className="app">
-        <div className="container">
-          {notification.show && (
-            <div className={`notification ${notification.type}`}>
-              <span className="notification-message">{notification.message}</span>
-              <button className="notification-close" onClick={closeNotification}>×</button>
-            </div>
-          )}
-          
-          <div className="form-header">
-            <button className="back-button" onClick={() => setCurrentScreen('memberCard')}>
-              ←
-            </button>
-            <span className="help-link">Help</span>
-          </div>
-          
-          <div className="form-content">
-            <div className="welcome-logo">
-              <div className="logo-text">🔗</div>
-            </div>
-            
-            <h2 className="form-title">Facebook ချိတ်ဆက်ပါ</h2>
-            <p className="form-subtitle">
-              Member Card တွေ verify လုပ်ဖို့နဲ့ security အတွက် Facebook account ချိတ်ဆက်ဖို့ လိုအပ်ပါတယ်
-            </p>
-            
-            <div className="facebook-info-card">
-              <div className="info-item">
-                <span className="info-icon">🔒</span>
-                <div className="info-text">
-                  <h4>လုံခြုံရေး</h4>
-                  <p>အကောင့်၏ လုံခြုံရေးကို မြှင့်တင်ပါသည်</p>
-                </div>
-              </div>
-              
-              <div className="info-item">
-                <span className="info-icon">✅</span>
-                <div className="info-text">
-                  <h4>စစ်ဆေးခြင်း</h4>
-                  <p>Member Card တွေကို verify လုပ်ပါသည်</p>
-                </div>
-              </div>
-              
-              <div className="info-item">
-                <span className="info-icon">🎯</span>
-                <div className="info-text">
-                  <h4>မဖြစ်မနေ</h4>
-                  <p>Member Card ရယူဖို့ Facebook လင့်ခ်ဖြစ်မှ ရပါမယ်</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="facebook-connect-section">
-              <FacebookButton 
-                onClick={async () => {
-                  try {
-                    showScreenLoading('Facebook နဲ့ ချိတ်ဆက်နေပါသည်...');
-                    await authService.createFacebookSession();
-                  } catch (error) {
-                    hideScreenLoading();
-                    showNotification(error.message, 'error');
-                  }
-                }}
-              />
-              
-              <p className="facebook-note">
-                Facebook နဲ့ ချိတ်ဆက်လိုက်ရင် UC ERA က သင့်ရဲ့ အခြေခံ profile အချက်အလက်တွေပဲ ရယူမှာပါ
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  // Facebook Authentication Success Screen
-  if (currentScreen === 'facebookSuccess') {
-    return (
-      <div className="app">
-        <div className="container">
-          {notification.show && (
-            <div className={`notification ${notification.type}`}>
-              <span className="notification-message">{notification.message}</span>
-              <button className="notification-close" onClick={closeNotification}>×</button>
-            </div>
-          )}
-          
-          <div className="form-content">
-            <div className="welcome-logo">
-              <div className="logo-text">✅</div>
-            </div>
-            
-            <h2 className="form-title">Facebook ချိတ်ဆက်ပြီးပါပြီ!</h2>
-            <p className="form-subtitle">
-              အခု Member Card ကို ပြုလုပ်ဖို့ ရပါပြီ
-            </p>
-            
-            <div className="success-info">
-              <div className="info-item">
-                <span className="info-icon">🎉</span>
-                <div className="info-text">
-                  <h4>အောင်မြင်ပါပြီ</h4>
-                  <p>Facebook account ချိတ်ဆက်မှု အောင်မြင်ပါပြီ</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="form-footer">
-            <button 
-              className="next-button" 
               onClick={handleCompleteMemberCard}
               disabled={!formData.privatePhoto || !formData.publicPhoto}
             >
               <span className="button-text">Complete Member Card</span>
             </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+
+
+  // Member Card Success Screen
+  if (currentScreen === 'memberCardSuccess') {
+    return (
+      <div className="app">
+        <div className="container">
+          {notification.show && (
+            <div className={`notification ${notification.type}`}>
+              <span className="notification-message">{notification.message}</span>
+              <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          <div className="member-card-success-content">
+            <h2 className="success-title">Your UC ERA Member Card</h2>
+            
+            {/* Member Card Container - 576:384 ratio */}
+            <div className="member-card-container">
+              {memberCardGenerating ? (
+                <div className="card-generating">
+                  <EyeLoader />
+                  <p className="generating-text">Member Card ပြုလုပ်နေပါသည်...</p>
+                </div>
+              ) : (
+                <div className="generated-card">
+                  {generatedMemberCard?.imageUrl ? (
+                    <img 
+                      src={generatedMemberCard.imageUrl} 
+                      alt="UC ERA Member Card" 
+                      className="member-card-image"
+                    />
+                  ) : (
+                    <div className="card-placeholder">
+                      <p>Member Card ပြုလုပ်ပြီးပါပြီ!</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {/* Action Buttons */}
+            {!memberCardGenerating && (
+              <div className="card-actions">
+                <button 
+                  className="save-card-button"
+                  onClick={() => {
+                    if (generatedMemberCard?.imageUrl) {
+                      const link = document.createElement('a')
+                      link.href = generatedMemberCard.imageUrl
+                      link.download = 'UC-ERA-Member-Card.png'
+                      link.click()
+                    }
+                    showNotification('Member Card ကို သိမ်းဆည်းပြီးပါပြီ! 💾', 'success')
+                  }}
+                >
+                  Save Card
+                </button>
+                
+                <button 
+                  className="go-home-button"
+                  onClick={() => {
+                    setCurrentScreen('welcome')
+                    setFormData({
+                      firstName: '',
+                      middleName: '',
+                      lastName: '',
+                      dateOfBirth: '',
+                      email: '',
+                      phoneNumber: '',
+                      relationshipStatus: '',
+                      gender: '',
+                      favoriteFood: [],
+                      favoriteArtist: [],
+                      loveLanguage: '',
+                      privatePhoto: null,
+                      publicPhoto: null,
+                      userId: null
+                    })
+                    setGeneratedMemberCard(null)
+                  }}
+                >
+                  Go to Home
+                </button>
+              </div>
+            )}
+            
+            {generatedMemberCard?.zodiacSign && (
+              <div className="card-info">
+                <p className="zodiac-info">
+                  🌟 သင့်ရဲ့ Zodiac Sign: <strong>{generatedMemberCard.zodiacSign}</strong>
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

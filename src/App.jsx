@@ -151,15 +151,43 @@ function App() {
             }
           }
           
-          // Draw member name with your exact specifications
+          // Draw member name with strict width constraint
           const namePos = templateData.positions.name
           ctx.fillStyle = namePos.color
-          ctx.font = `${namePos.fontWeight || 'normal'} ${namePos.fontSize}px ${namePos.fontFamily}, Arial, sans-serif`
-          ctx.textAlign = 'center'
+          let fontSize = namePos.fontSize
+          let fontWeight = namePos.fontWeight || 'normal'
+          
           console.log('🎨 Drawing member name:', templateData.userName, 'at position:', namePos)
-          // Center align: x position + half of width
-          const centerX = namePos.x + (namePos.width / 2)
-          ctx.fillText(templateData.userName, centerX, namePos.y)
+          
+          // Calculate safe rendering area (don't overlap with photo)
+          const photoEnd = templateData.positions.photo.x + templateData.positions.photo.width + 10 // 10px margin
+          const safeStartX = Math.max(namePos.x, photoEnd)
+          const availableWidth = Math.min(namePos.width, canvas.width - safeStartX - 10) // 10px right margin
+          const maxAllowedWidth = Math.min(285, availableWidth) // Strict 285px limit
+          
+          console.log(`📏 Safe area: startX=${safeStartX}, maxWidth=${maxAllowedWidth}px`)
+          
+          // Adjust font size to fit within constraints
+          let adjustedFontSize = fontSize
+          let textWidth
+          do {
+            ctx.font = `${fontWeight} ${adjustedFontSize}px ${namePos.fontFamily}, Arial, sans-serif`
+            textWidth = ctx.measureText(templateData.userName).width
+            if (textWidth > maxAllowedWidth && adjustedFontSize > 12) {
+              adjustedFontSize -= 1
+              console.log(`🔧 Reducing font size to ${adjustedFontSize}px (text width: ${textWidth}px)`)
+            }
+          } while (textWidth > maxAllowedWidth && adjustedFontSize > 12)
+          
+          // Set final font and draw text
+          ctx.font = `${fontWeight} ${adjustedFontSize}px ${namePos.fontFamily}, Arial, sans-serif`
+          ctx.textAlign = 'left' // Use left align for better control
+          
+          // Position text safely
+          const finalX = safeStartX
+          ctx.fillText(templateData.userName, finalX, namePos.y, maxAllowedWidth)
+          
+          console.log(`✅ Name rendered: font=${adjustedFontSize}px, x=${finalX}, width=${textWidth}px (max: ${maxAllowedWidth}px)`)
           
           // Draw member ID with your exact specifications  
           const idPos = templateData.positions.memberId

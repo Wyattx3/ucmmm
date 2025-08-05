@@ -37,9 +37,9 @@ async function generateMemberCardWithCanvas(user, zodiacSign, templateId, photoU
             memberId: memberId,
             photoUrl: photoUrl,
                                 positions: {
-                        photo: { x: 40, y: 41, width: 201, height: 302, borderRadius: 14 },
-                        name: { x: 280, y: 301, width: 275, height: 34, fontSize: 50, fontWeight: 700, fontFamily: 'Asap Bold Italic', color: '#000000' },
-                        memberId: { x: 463, y: 358, width: 43, height: 13, fontSize: 50, fontWeight: 700, fontFamily: 'Arvo Bold', color: '#4A4A4A' }
+                        photo: { x: 39, y: 39, width: 203, height: 305, borderRadius: 15 },
+                        name: { x: 270, y: 295, width: 285, height: 36, fontSize: 30, fontWeight: 700, fontFamily: 'Asap Bold Italic', color: '#000000' },
+                        memberId: { x: 462, y: 355, width: 70, height: 13, fontSize: 13, fontWeight: 700, fontFamily: 'Arvo Bold', color: '#4A4A4A' }
                     },
             canvasSize: { width: 576, height: 384 }
         };

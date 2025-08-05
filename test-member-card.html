@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Member Card Position Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #ff6b35;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        .test-button:hover {
+            background: #e55a2e;
+        }
+        #memberCard {
+            margin: 20px auto;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            overflow: hidden;
+            display: block;
+        }
+        .debug-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.loading {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎴 Member Card Position Test</h1>
+        <p>မင်းရဲ့ member card positioning မှန်လားစစ်ဖို့ test လုပ်ကြည့်ပါ!</p>
+        
+        <button class="test-button" onclick="testMemberCard()">🧪 Test Member Card Position</button>
+        <button class="test-button" onclick="testWithDifferentName()">📝 Test Long Name</button>
+        <button class="test-button" onclick="testWithDifferentID()">🔢 Test Different ID</button>
+        
+        <div id="status"></div>
+        
+        <canvas id="memberCard" style="display: none;"></canvas>
+        
+        <div id="debugInfo" class="debug-info" style="display: none;">
+            <h3>Debug Information:</h3>
+            <div id="debugText"></div>
+        </div>
+    </div>
+
+    <script>
+        const APPWRITE_ENDPOINT = 'https://cloud.appwrite.io/v1';
+        const PROJECT_ID = '68881366001c877f06e';
+        
+        function showStatus(message, type = 'loading') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = `<div class="status ${type}">${message}</div>`;
+        }
+        
+        function showDebug(data) {
+            const debugDiv = document.getElementById('debugInfo');
+            const debugText = document.getElementById('debugText');
+            debugText.innerHTML = `
+                <strong>Template Size:</strong> ${data.canvasSize.width} x ${data.canvasSize.height}<br>
+                <strong>Template File:</strong> ${data.templateFile}<br>
+                <strong>Zodiac Sign:</strong> ${data.zodiacSign}<br>
+                <strong>User Name:</strong> ${data.userName}<br>
+                <strong>Member ID:</strong> ${data.memberId}<br><br>
+                
+                <strong>Photo Position:</strong><br>
+                X: ${data.positions.photo.x}px, Y: ${data.positions.photo.y}px<br>
+                Size: ${data.positions.photo.width}x${data.positions.photo.height}px<br>
+                Border Radius: ${data.positions.photo.borderRadius}px<br><br>
+                
+                <strong>Name Position:</strong><br>
+                X: ${data.positions.name.x}px, Y: ${data.positions.name.y}px<br>
+                Size: ${data.positions.name.width}x${data.positions.name.height}px<br>
+                Font: ${data.positions.name.fontSize}px ${data.positions.name.fontFamily}<br>
+                Weight: ${data.positions.name.fontWeight}, Color: ${data.positions.name.color}<br><br>
+                
+                <strong>Member ID Position:</strong><br>
+                X: ${data.positions.memberId.x}px, Y: ${data.positions.memberId.y}px<br>
+                Size: ${data.positions.memberId.width}x${data.positions.memberId.height}px<br>
+                Font: ${data.positions.memberId.fontSize}px ${data.positions.memberId.fontFamily}<br>
+                Weight: ${data.positions.memberId.fontWeight}, Color: ${data.positions.memberId.color}
+            `;
+            debugDiv.style.display = 'block';
+        }
+        
+        async function createMemberCardWithCanvas(templateData) {
+            const canvas = document.getElementById('memberCard');
+            const ctx = canvas.getContext('2d');
+            
+            // Set canvas size
+            canvas.width = templateData.canvasSize.width;
+            canvas.height = templateData.canvasSize.height;
+            canvas.style.display = 'block';
+            
+            // Load template image
+            const templateImg = new Image();
+            templateImg.crossOrigin = 'anonymous';
+            
+            return new Promise((resolve, reject) => {
+                templateImg.onload = async () => {
+                    try {
+                        // Draw template background
+                        ctx.drawImage(templateImg, 0, 0, canvas.width, canvas.height);
+                        
+                        // Load and draw user photo
+                        if (templateData.photoUrl) {
+                            try {
+                                const photoImg = new Image();
+                                photoImg.crossOrigin = 'anonymous';
+                                
+                                photoImg.onload = () => {
+                                    const photoPos = templateData.positions.photo;
+                                    
+                                    // Save context for clipping
+                                    ctx.save();
+                                    
+                                    // Create rounded rectangle path manually
+                                    ctx.beginPath();
+                                    ctx.moveTo(photoPos.x + photoPos.borderRadius, photoPos.y);
+                                    ctx.arcTo(photoPos.x + photoPos.width, photoPos.y, photoPos.x + photoPos.width, photoPos.y + photoPos.height, photoPos.borderRadius);
+                                    ctx.arcTo(photoPos.x + photoPos.width, photoPos.y + photoPos.height, photoPos.x, photoPos.y + photoPos.height, photoPos.borderRadius);
+                                    ctx.arcTo(photoPos.x, photoPos.y + photoPos.height, photoPos.x, photoPos.y, photoPos.borderRadius);
+                                    ctx.arcTo(photoPos.x, photoPos.y, photoPos.x + photoPos.width, photoPos.y, photoPos.borderRadius);
+                                    ctx.closePath();
+                                    ctx.clip();
+                                    
+                                    // Draw photo
+                                    ctx.drawImage(photoImg, photoPos.x, photoPos.y, photoPos.width, photoPos.height);
+                                    
+                                    // Restore context
+                                    ctx.restore();
+                                    
+                                    // Draw text elements
+                                    drawTextElements();
+                                };
+                                
+                                photoImg.onerror = () => {
+                                    // If photo fails to load, just draw text elements
+                                    drawTextElements();
+                                };
+                                
+                                photoImg.src = templateData.photoUrl;
+                            } catch (error) {
+                                console.warn('Photo loading failed:', error);
+                                drawTextElements();
+                            }
+                        } else {
+                            drawTextElements();
+                        }
+                        
+                        function drawTextElements() {
+                            // Draw member name
+                            const namePos = templateData.positions.name;
+                            ctx.fillStyle = namePos.color;
+                            ctx.font = `${namePos.fontWeight || 'normal'} ${namePos.fontSize}px ${namePos.fontFamily}, Arial, sans-serif`;
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'top';
+                            
+                            const centerX = namePos.x + (namePos.width / 2);
+                            ctx.fillText(templateData.userName, centerX, namePos.y);
+                            
+                            // Draw member ID
+                            const idPos = templateData.positions.memberId;
+                            ctx.fillStyle = idPos.color;
+                            ctx.font = `${idPos.fontWeight || 'normal'} ${idPos.fontSize}px ${idPos.fontFamily}, Arial, sans-serif`;
+                            ctx.textAlign = 'left';
+                            ctx.fillText(templateData.memberId, idPos.x, idPos.y);
+                            
+                            resolve();
+                        }
+                        
+                    } catch (error) {
+                        reject(error);
+                    }
+                };
+                
+                templateImg.onerror = () => {
+                    reject(new Error('Template image failed to load'));
+                };
+                
+                templateImg.src = `/templates/${templateData.templateFile}`;
+            });
+        }
+        
+        async function callMemberCardFunction(testData = {}) {
+            try {
+                showStatus('🔄 Member Card Function ကို call လုပ်နေပါတယ်...', 'loading');
+                
+                const response = await fetch(`${APPWRITE_ENDPOINT}/functions/generate-member-card/executions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Appwrite-Project': PROJECT_ID
+                    },
+                    body: JSON.stringify({
+                        userId: testData.userId || 'test123',
+                        testName: testData.testName,
+                        testMemberId: testData.testMemberId
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                
+                // Parse the response body
+                const memberCardData = JSON.parse(result.responseBody);
+                
+                if (memberCardData.success && memberCardData.data) {
+                    showStatus('✅ Member Card Data ရရှိပြီး Canvas မှာ render လုပ်နေပါတယ်...', 'loading');
+                    
+                    // Override test data if provided
+                    if (testData.testName) {
+                        memberCardData.data.userName = testData.testName;
+                    }
+                    if (testData.testMemberId) {
+                        memberCardData.data.memberId = testData.testMemberId;
+                    }
+                    
+                    showDebug(memberCardData.data);
+                    
+                    await createMemberCardWithCanvas(memberCardData.data);
+                    
+                    showStatus('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! Position တွေ စစ်ကြည့်ပါ!', 'success');
+                } else {
+                    throw new Error('Member card data not found in response');
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                showStatus(`❌ Error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testMemberCard() {
+            await callMemberCardFunction();
+        }
+        
+        async function testWithDifferentName() {
+            await callMemberCardFunction({
+                testName: 'မင်းမင်းလှိုင် မန်နယ်ရမေန့်တင်'
+            });
+        }
+        
+        async function testWithDifferentID() {
+            await callMemberCardFunction({
+                testMemberId: '9876543'
+            });
+        }
+    </script>
+</body>
+</html>

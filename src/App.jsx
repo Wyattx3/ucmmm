@@ -1469,7 +1469,7 @@ function App() {
               }
               
               setGeneratedMemberCard(memberCardData)
-              showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! ✨ (PNG Template)', 'success')
+              showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! ✨', 'success')
             } else if (parsedResult.data && parsedResult.data.html) {
               console.log('🎨 Converting HTML to image...')
               
@@ -1482,7 +1482,7 @@ function App() {
               }
               
               setGeneratedMemberCard(memberCardData)
-              showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! ✨ (Template Based)', 'success')
+              showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! ✨', 'success')
             } else {
               // Use debug data if this is test function, otherwise use actual data
               setGeneratedMemberCard(parsedResult.data || parsedResult.debug)
@@ -3459,7 +3459,6 @@ function App() {
               {memberCardGenerating ? (
                 <div className="card-generating">
                   <EyeLoader />
-                  <p className="generating-text">Member Card ပြုလုပ်နေပါသည်...</p>
                 </div>
               ) : (
                 <div className="generated-card">
@@ -3524,13 +3523,7 @@ function App() {
               </div>
             )}
             
-            {generatedMemberCard?.zodiacSign && (
-              <div className="card-info">
-                <p className="zodiac-info">
-                  🌟 သင့်ရဲ့ Zodiac Sign: <strong>{generatedMemberCard.zodiacSign}</strong>
-                </p>
-              </div>
-            )}
+
           </div>
         </div>
       </div>

@@ -86,10 +86,16 @@ module.exports = async ({ req, res, log, error }) => {
         // Get user data from database with better error handling
         let user;
         try {
+            log('🔍 Attempting to get user from database:', userId);
+            log('🔍 Database ID: ucera-main, Collection: users');
             user = await databases.getDocument('ucera-main', 'users', userId);
             log('👤 User data retrieved successfully:', user.fullName || user.firstName);
+            log('📧 User email:', user.email);
+            log('📸 User publicPhoto available:', !!user.publicPhoto);
         } catch (dbError) {
-            log('❌ Database access failed, using hardcoded user data for now');
+            log('❌ Database access failed with error:', dbError.message);
+            log('❌ Error code:', dbError.code);
+            log('❌ Error type:', dbError.type);
             // Use sample user data when database fails
             user = {
                 fullName: 'Sample User',
@@ -97,6 +103,7 @@ module.exports = async ({ req, res, log, error }) => {
                 lastName: 'User', 
                 dateOfBirth: '1995-08-15',
                 memberID: '1234567',
+                publicPhoto: null, // Use publicPhoto not publicPhotoUrl
                 publicPhotoUrl: null,
                 privatePhotoUrl: null
             };

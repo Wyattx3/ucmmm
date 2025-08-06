@@ -3484,14 +3484,43 @@ function App() {
               <div className="card-actions">
                 <button 
                   className="save-card-button"
-                  onClick={() => {
-                    if (generatedMemberCard?.imageUrl) {
-                      const link = document.createElement('a')
-                      link.href = generatedMemberCard.imageUrl
-                      link.download = 'UC-ERA-Member-Card.png'
-                      link.click()
+                  onClick={async () => {
+                    try {
+                      if (generatedMemberCard?.imageUrl) {
+                        // Create a temporary link element for download
+                        const link = document.createElement('a')
+                        
+                        // For data URLs (base64), use directly
+                        if (generatedMemberCard.imageUrl.startsWith('data:')) {
+                          link.href = generatedMemberCard.imageUrl
+                          link.download = `UC-ERA-Member-Card-${formData.firstName || 'User'}.png`
+                          document.body.appendChild(link)
+                          link.click()
+                          document.body.removeChild(link)
+                        } else {
+                          // For external URLs, fetch and convert to blob
+                          const response = await fetch(generatedMemberCard.imageUrl)
+                          const blob = await response.blob()
+                          const url = window.URL.createObjectURL(blob)
+                          
+                          link.href = url
+                          link.download = `UC-ERA-Member-Card-${formData.firstName || 'User'}.png`
+                          document.body.appendChild(link)
+                          link.click()
+                          document.body.removeChild(link)
+                          
+                          // Clean up the object URL
+                          window.URL.revokeObjectURL(url)
+                        }
+                        
+                        showNotification('Member Card ကို Download ပြီးပါပြီ! 💾', 'success')
+                      } else {
+                        showNotification('❌ Member Card မတွေ့ပါ။ ပြန်လည်ကြိုးစားပါ။', 'error')
+                      }
+                    } catch (error) {
+                      console.error('Download error:', error)
+                      showNotification('❌ Download မအောင်မြင်ပါ။ ပြန်လည်ကြိုးစားပါ။', 'error')
                     }
-                    showNotification('Member Card ကို သိမ်းဆည်းပြီးပါပြီ! 💾', 'success')
                   }}
                 >
                   Save Card

@@ -2531,6 +2531,7 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   justify-content: center;
   min-height: 100vh;
   padding: 20px;
+  padding-bottom: 80px;
 }
 
 .success-title {
@@ -2678,9 +2679,14 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
 
 /* Member Card Footer */
 .member-card-footer {
-  margin-top: 80px;
-  padding: 20px 0;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  padding: 15px 0;
   border-top: 1px solid #e5e7eb;
+  z-index: 10;
 }
 
 .footer-content {
@@ -2716,6 +2722,10 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
 
 /* Mobile responsive */
 @media (max-width: 640px) {
+  .member-card-success-content {
+    padding-bottom: 70px;
+  }
+  
   .member-card-container {
     width: calc(90vw + 4px);
     height: calc((90vw * 384 / 576) + 4px); /* Maintain 576:384 ratio */
@@ -2752,8 +2762,7 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   }
   
   .member-card-footer {
-    margin-top: 70px;
-    padding: 15px 0;
+    padding: 12px 0;
   }
   
   .footer-logo {

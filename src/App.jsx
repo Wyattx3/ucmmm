@@ -3525,6 +3525,16 @@ function App() {
               </div>
             )}
             
+            {/* Footer */}
+            <div className="member-card-footer">
+              <div className="footer-content">
+                <img src="/ucm-logo.png" alt="UCM Logo" className="footer-logo" />
+                <div className="footer-text">
+                  <span className="powered-by">Powered by Team UCM</span>
+                  <span className="copyright">© 2024 All Rights Reserved</span>
+                </div>
+              </div>
+            </div>
 
           </div>
         </div>

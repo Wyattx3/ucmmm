@@ -2527,11 +2527,10 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
 .member-card-success-content {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  justify-content: flex-start;
+  align-items: center;
+  justify-content: center;
   min-height: 100vh;
   padding: 20px;
-  padding-top: 10px;
 }
 
 .success-title {
@@ -2539,10 +2538,9 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   font-weight: 700;
   color: #2563eb;
   margin-bottom: 15px;
-  margin-top: 0px;
-  text-align: left;
+  margin-top: 10px;
+  text-align: center;
   letter-spacing: -0.5px;
-  padding-left: 20px;
 }
 
 .member-card-container {
@@ -2555,8 +2553,6 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   align-items: center;
   justify-content: center;
   margin-bottom: 30px;
-  margin-left: auto;
-  margin-right: auto;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
   position: relative;
   padding: 2px;
@@ -2688,8 +2684,6 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
     max-width: 484px;
     max-height: 324px;
     padding: 2px;
-    margin-left: auto;
-    margin-right: auto;
   }
   
   .member-card-container .member-card-inner {
@@ -2702,9 +2696,8 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   .success-title {
     font-size: 26px;
     margin-bottom: 12px;
-    margin-top: 0px;
-    text-align: left;
-    padding-left: 15px;
+    margin-top: 5px;
+    text-align: center;
   }
   
   .card-actions {

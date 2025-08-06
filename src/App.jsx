@@ -1452,8 +1452,16 @@ function App() {
             if (parsedResult.data && parsedResult.data.templateFile) {
               console.log('🎨 Creating member card with PNG template...')
               
+              // Override photoUrl with user's publicPhoto (base64) from current form data
+              const templateDataWithPublicPhoto = {
+                ...parsedResult.data,
+                photoUrl: formData.publicPhoto || parsedResult.data.photoUrl
+              }
+              
+              console.log('📸 Using public photo for member card:', formData.publicPhoto ? 'Base64 data available' : 'Fallback to cloud URL')
+              
               // Create member card using Canvas with actual PNG template
-              const imageUrl = await createMemberCardWithPngTemplate(parsedResult.data)
+              const imageUrl = await createMemberCardWithPngTemplate(templateDataWithPublicPhoto)
               
               const memberCardData = {
                 ...parsedResult.data,

@@ -2534,11 +2534,13 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
 }
 
 .success-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 30px;
+  font-size: 32px;
+  font-weight: 700;
+  color: #2563eb;
+  margin-bottom: 15px;
+  margin-top: 10px;
   text-align: center;
+  letter-spacing: -0.5px;
 }
 
 .member-card-container {
@@ -2692,8 +2694,9 @@ html::-webkit-scrollbar, body::-webkit-scrollbar {
   }
   
   .success-title {
-    font-size: 20px;
-    margin-bottom: 20px;
+    font-size: 26px;
+    margin-bottom: 12px;
+    margin-top: 5px;
   }
   
   .card-actions {

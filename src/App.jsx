@@ -3456,25 +3456,27 @@ function App() {
             
             {/* Member Card Container - 576:384 ratio */}
             <div className="member-card-container">
-              {memberCardGenerating ? (
-                <div className="card-generating">
-                  <EyeLoader />
-                </div>
-              ) : (
-                <div className="generated-card">
-                  {generatedMemberCard?.imageUrl ? (
-                    <img 
-                      src={generatedMemberCard.imageUrl} 
-                      alt="UC ERA Member Card" 
-                      className="member-card-image"
-                    />
-                  ) : (
-                    <div className="card-placeholder">
-                      <p>Member Card ပြုလုပ်ပြီးပါပြီ!</p>
-                    </div>
-                  )}
-                </div>
-              )}
+              <div className="member-card-inner">
+                {memberCardGenerating ? (
+                  <div className="card-generating">
+                    <EyeLoader />
+                  </div>
+                ) : (
+                  <div className="generated-card">
+                    {generatedMemberCard?.imageUrl ? (
+                      <img 
+                        src={generatedMemberCard.imageUrl} 
+                        alt="UC ERA Member Card" 
+                        className="member-card-image"
+                      />
+                    ) : (
+                      <div className="card-placeholder">
+                        <p>Member Card ပြုလုပ်ပြီးပါပြီ!</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             
             {/* Action Buttons */}

@@ -79,6 +79,53 @@ function App() {
   const passcodeInputRefs = useRef([])
   const canvasRef = useRef(null)
 
+  // Steganography functions
+  const embedDataInImage = (imageData, data) => {
+    try {
+      const dataBytes = new TextEncoder().encode(data);
+      const dataLength = dataBytes.length;
+      
+      // Convert data length to 32-bit array for embedding
+      const lengthBytes = new Uint8Array(4);
+      lengthBytes[0] = (dataLength >>> 24) & 0xFF;
+      lengthBytes[1] = (dataLength >>> 16) & 0xFF;
+      lengthBytes[2] = (dataLength >>> 8) & 0xFF;
+      lengthBytes[3] = dataLength & 0xFF;
+      
+      // Combine length and data
+      const fullData = new Uint8Array(4 + dataLength);
+      fullData.set(lengthBytes, 0);
+      fullData.set(dataBytes, 4);
+      
+      const pixels = imageData.data;
+      let dataIndex = 0;
+      let bitIndex = 0;
+      
+      // Embed data in LSB of red channel
+      for (let i = 0; i < pixels.length && dataIndex < fullData.length; i += 4) {
+        if (dataIndex < fullData.length) {
+          const bit = (fullData[dataIndex] >>> (7 - bitIndex)) & 1;
+          
+          // Modify LSB of red channel
+          pixels[i] = (pixels[i] & 0xFE) | bit;
+          
+          bitIndex++;
+          if (bitIndex === 8) {
+            bitIndex = 0;
+            dataIndex++;
+          }
+        }
+      }
+      
+      console.log('🔐 Embedded', fullData.length, 'bytes of hidden data');
+      return imageData;
+      
+    } catch (error) {
+      console.error('❌ LSB embedding error:', error.message);
+      throw error;
+    }
+  };
+
   // Function to create member card with PNG template using Canvas
   const createMemberCardWithPngTemplate = async (templateData) => {
     try {
@@ -183,6 +230,20 @@ function App() {
           ctx.textAlign = 'left'
           console.log('🆔 Drawing member ID:', templateData.memberId, 'at position:', idPos)
           ctx.fillText(templateData.memberId, idPos.x, idPos.y)
+          
+          // Add steganography if data is provided
+          if (templateData.steganographyData) {
+            console.log('🔐 Adding steganography to member card...');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const hiddenData = JSON.stringify(templateData.steganographyData);
+            
+            // Embed steganography data
+            embedDataInImage(imageData, hiddenData);
+            
+            // Put modified image data back to canvas
+            ctx.putImageData(imageData, 0, 0);
+            console.log('🔐 Steganography embedded successfully!');
+          }
           
           // Convert to data URL
           const dataUrl = canvas.toDataURL('image/png', 0.9)
@@ -1460,9 +1521,14 @@ function App() {
               setGeneratedMemberCard(memberCardData)
               showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! 🔐 ✨', 'success')
             }
-            // Check if response contains PNG template data (old approach)
+            // Check if response contains PNG template data with or without steganography
             else if (parsedResult.data && parsedResult.data.templateFile) {
-              console.log('🎨 Creating member card with PNG template...')
+              // Check if steganography data is included
+              if (parsedResult.data.steganographyData) {
+                console.log('🔐 Creating member card with PNG template + steganography...')
+              } else {
+                console.log('🎨 Creating member card with PNG template...')
+              }
               
               // Override photoUrl with user's publicPhoto (base64) from current form data
               const templateDataWithPublicPhoto = {
@@ -1472,7 +1538,7 @@ function App() {
               
               console.log('📸 Using public photo for member card:', formData.publicPhoto ? 'Base64 data available' : 'Fallback to cloud URL')
               
-              // Create member card using Canvas with actual PNG template
+              // Create member card using Canvas with actual PNG template (steganography will be embedded if data is provided)
               const imageUrl = await createMemberCardWithPngTemplate(templateDataWithPublicPhoto)
               
               const memberCardData = {
@@ -1481,7 +1547,13 @@ function App() {
               }
               
               setGeneratedMemberCard(memberCardData)
-              showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! ✨', 'success')
+              
+              // Show appropriate notification based on steganography inclusion
+              if (parsedResult.data.steganographyData) {
+                showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! 🔐 ✨', 'success')
+              } else {
+                showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! ✨', 'success')
+              }
             } else if (parsedResult.data && parsedResult.data.html) {
               console.log('🎨 Converting HTML to image...')
               

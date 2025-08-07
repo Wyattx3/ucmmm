@@ -1,5 +1,5 @@
 const { Client, Databases, Storage } = require('node-appwrite');
-const { generateMemberCardWithCanvas } = require('./canvas-generator');
+// Canvas generator removed - using PNG template approach
 
 module.exports = async ({ req, res, log, error }) => {
     log('🚀 Member Card Generation Function Started');
@@ -145,35 +145,48 @@ module.exports = async ({ req, res, log, error }) => {
         log('📊 Placid request data prepared');
         log('🔑 Placid token available:', !!process.env.PLACID_TOKEN);
 
-        // Generate member card using Canvas (Local Generation)
+        // Generate member card data for frontend rendering with steganography
         try {
-            log('🎨 Starting Canvas-based member card generation...');
+            log('📋 Preparing member card data for frontend steganography...');
             
-            // Generate member card using Canvas
-            const memberCardBuffer = await generateMemberCardWithCanvas(
-                user,
-                zodiacSign,
-                templateId,
-                photoUrl,
-                log
-            );
+            // Prepare user data
+            const userName = user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Sample User';
+            const memberId = user.memberID || user.memberId || '1234567';
+            const userEmail = user.email || 'unknown@email.com';
             
-            log('🖼️ Member card generated with Canvas');
+            // Prepare member card template data for frontend Canvas processing
+            const memberCardData = {
+                templateFile: `${zodiacSign}.png`,
+                zodiacSign: zodiacSign,
+                userName: userName,
+                memberId: memberId,
+                userEmail: userEmail,
+                photoUrl: user.publicPhoto || null,
+                positions: {
+                    photo: { x: 39, y: 39, width: 203, height: 305, borderRadius: 15 },
+                    name: { x: 270, y: 295, width: 284, height: 36, fontSize: 30, fontWeight: 'bold', fontFamily: 'Arial', color: '#000000' },
+                    memberId: { x: 462, y: 355, width: 70, height: 13, fontSize: 13, fontWeight: 'normal', fontFamily: 'Arial', color: '#000000' }
+                },
+                canvasSize: { width: 576, height: 384 },
+                steganographyData: {
+                    email: userEmail,
+                    memberId: memberId,
+                    timestamp: new Date().toISOString(),
+                    version: "1.0"
+                }
+            };
             
-            // Convert buffer to JSON data for frontend Canvas processing
-            const memberCardData = JSON.parse(memberCardBuffer.toString('utf8'));
-            log('📄 Member card template data generated successfully');
-            
-            log('🎉 Member card template data generated successfully!');
+            log('📄 Member card template data prepared successfully');
+            log('🔐 Steganography data included for frontend processing');
+            log('🎉 Member card data ready for frontend steganography!');
 
             return res.json({
                 success: true,
-                message: 'Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! 🎉 (PNG Template Based)',
+                message: 'Member Card data prepared successfully! Frontend will handle steganography.',
                 data: {
                     ...memberCardData,
-                    zodiacSign: zodiacSign,
                     templateId: templateId,
-                    generatedWith: 'PNG Template',
+                    generatedWith: 'Frontend Canvas + Steganography',
                     useRealTemplate: true
                 }
             });
@@ -185,7 +198,7 @@ module.exports = async ({ req, res, log, error }) => {
             log('🔄 Falling back to placeholder mode...');
             
             const fallbackImageUrl = 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&h=600&fit=crop&crop=face';
-            
+
             return res.json({
                 success: true,
                 message: 'Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! 🎉 (Fallback Mode)',

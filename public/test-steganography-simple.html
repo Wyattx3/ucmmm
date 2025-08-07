@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔐 Steganography Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.2em;
+        }
+        
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: #f9f9f9;
+        }
+        
+        .section h2 {
+            color: #555;
+            margin-bottom: 15px;
+            font-size: 1.4em;
+        }
+        
+        input[type="file"], input[type="text"], textarea {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        
+        button {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+            transition: transform 0.2s;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .preview {
+            margin: 15px 0;
+            text-align: center;
+        }
+        
+        .preview img {
+            max-width: 100%;
+            max-height: 300px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        
+        .result {
+            background: #f0f8f0;
+            border: 2px solid #4caf50;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            word-wrap: break-word;
+        }
+        
+        .error {
+            background: #fff0f0;
+            border: 2px solid #f44336;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            color: #d32f2f;
+        }
+        
+        .log {
+            background: #f5f5f5;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+        }
+        
+        .instruction {
+            background: #e3f2fd;
+            border: 2px solid #2196f3;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            color: #0d47a1;
+        }
+        
+        .success {
+            background: #e8f5e8;
+            border: 2px solid #4caf50;
+            color: #2e7d32;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Steganography Security Test</h1>
+        
+        <div class="instruction">
+            <h3>📋 Test Instructions:</h3>
+            <p>1. <strong>Extract Test:</strong> Upload any member card image to check for hidden data</p>
+            <p>2. <strong>Generate Test:</strong> Create a test image with embedded data to verify embedding works</p>
+            <p>3. Use this to verify that the member card security system is working properly</p>
+        </div>
+        
+        <!-- Extract Section -->
+        <div class="section">
+            <h2>🔍 Extract Hidden Data from Member Card</h2>
+            <input type="file" id="extractFile" accept="image/*" />
+            <div class="preview" id="extractPreview"></div>
+            <button onclick="extractData()">🔓 Extract Hidden Data</button>
+            <div id="extractResult"></div>
+            <div class="log" id="extractLog">Logs will appear here...</div>
+        </div>
+        
+        <!-- Generate Section -->
+        <div class="section">
+            <h2>🔒 Generate Test Image with Hidden Data</h2>
+            <input type="text" id="testEmail" placeholder="Enter test email (e.g., test@example.com)" value="test@ucera.com" />
+            <input type="text" id="testMemberId" placeholder="Enter test member ID (e.g., 1234567)" value="1234567" />
+            <button onclick="generateTestImage()">🎨 Generate Test Image</button>
+            <div class="preview" id="generatePreview"></div>
+            <button id="downloadBtn" onclick="downloadTestImage()" style="display:none;">💾 Download Test Image</button>
+            <div id="generateResult"></div>
+            <div class="log" id="generateLog">Logs will appear here...</div>
+        </div>
+        
+        <!-- Verify Section -->
+        <div class="section">
+            <h2>✅ Verify Generated Test Image</h2>
+            <button onclick="verifyTestImage()" id="verifyBtn" style="display:none;">🔍 Verify Test Image</button>
+            <div id="verifyResult"></div>
+            <div class="log" id="verifyLog">Logs will appear here...</div>
+        </div>
+    </div>
+
+    <script>
+        let testImageCanvas = null;
+        
+        // Log function
+        function log(message, logId = 'extractLog') {
+            const logElement = document.getElementById(logId);
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.textContent += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+        
+        // Handle file preview
+        document.getElementById('extractFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const preview = document.getElementById('extractPreview');
+                    preview.innerHTML = `<img src="${e.target.result}" alt="Selected Image" />`;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+        
+        // Extract data function
+        async function extractData() {
+            const fileInput = document.getElementById('extractFile');
+            const resultDiv = document.getElementById('extractResult');
+            const logId = 'extractLog';
+            
+            if (!fileInput.files[0]) {
+                resultDiv.innerHTML = '<div class="error">❌ Please select an image file first!</div>';
+                return;
+            }
+            
+            // Clear previous logs
+            document.getElementById(logId).textContent = '';
+            log('🔍 Starting steganography extraction...', logId);
+            
+            try {
+                const file = fileInput.files[0];
+                const imageUrl = URL.createObjectURL(file);
+                
+                log(`📁 File selected: ${file.name} (${(file.size/1024).toFixed(2)} KB)`, logId);
+                
+                const img = new Image();
+                img.crossOrigin = "Anonymous";
+                img.src = imageUrl;
+                
+                await new Promise((resolve, reject) => {
+                    img.onload = resolve;
+                    img.onerror = reject;
+                });
+                
+                log(`🖼️ Image loaded: ${img.width}x${img.height}`, logId);
+                
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                log(`📊 Image data extracted: ${imageData.data.length} pixels`, logId);
+                
+                const extractedData = extractDataFromImage(imageData, (msg) => log(msg, logId));
+                
+                URL.revokeObjectURL(imageUrl);
+                
+                if (extractedData) {
+                    try {
+                        const parsedData = JSON.parse(extractedData);
+                        resultDiv.innerHTML = `
+                            <div class="result success">
+                                <h3>✅ Hidden Data Successfully Extracted!</h3>
+                                <p><strong>📧 Email:</strong> ${parsedData.email || 'Not found'}</p>
+                                <p><strong>🆔 Member ID:</strong> ${parsedData.memberId || 'Not found'}</p>
+                                <p><strong>⏰ Timestamp:</strong> ${parsedData.timestamp || 'Not found'}</p>
+                                <p><strong>📌 Version:</strong> ${parsedData.version || 'Not found'}</p>
+                                <hr>
+                                <p><strong>Raw Data:</strong></p>
+                                <pre style="background:#f0f0f0;padding:10px;border-radius:5px;font-size:12px;">${extractedData}</pre>
+                            </div>
+                        `;
+                        log('✅ Steganography extraction completed successfully!', logId);
+                    } catch (e) {
+                        resultDiv.innerHTML = `
+                            <div class="result">
+                                <h3>📝 Raw Data Extracted (Not JSON)</h3>
+                                <pre style="background:#f0f0f0;padding:10px;border-radius:5px;">${extractedData}</pre>
+                            </div>
+                        `;
+                        log('⚠️ Extracted data is not valid JSON', logId);
+                    }
+                } else {
+                    resultDiv.innerHTML = '<div class="error">❌ No hidden data found in this image</div>';
+                    log('❌ No steganography data detected', logId);
+                }
+                
+            } catch (error) {
+                log(`❌ Error during extraction: ${error.message}`, logId);
+                resultDiv.innerHTML = `<div class="error">❌ Extraction failed: ${error.message}</div>`;
+            }
+        }
+        
+        // Extract data from image function (LSB steganography)
+        function extractDataFromImage(imageData, logFunc) {
+            try {
+                const pixels = imageData.data;
+                let dataLength = 0;
+                let lengthBytesRead = 0;
+                let currentByte = 0;
+                let bitCount = 0;
+                
+                logFunc('🔐 Extracting data length from first 32 bits...');
+                
+                // First, extract the 4 bytes representing the data length
+                for (let i = 0; i < pixels.length && lengthBytesRead < 4; i += 4) {
+                    const lsb = pixels[i] & 1; // Get LSB of red channel
+                    currentByte = (currentByte << 1) | lsb;
+                    bitCount++;
+                    
+                    if (bitCount === 8) {
+                        dataLength = (dataLength << 8) | currentByte;
+                        currentByte = 0;
+                        bitCount = 0;
+                        lengthBytesRead++;
+                    }
+                }
+                
+                logFunc(`🔐 Extracted data length: ${dataLength} bytes`);
+                
+                if (dataLength <= 0 || dataLength > 10000) {
+                    logFunc(`❌ Invalid data length: ${dataLength}`);
+                    return null;
+                }
+                
+                // Now, extract the actual hidden data
+                let dataBytes = [];
+                let dataIndex = 0;
+                currentByte = 0;
+                bitCount = 0;
+                
+                for (let i = 32; i < pixels.length && dataIndex < dataLength; i += 4) { // Start after length bytes (32 bits)
+                    const lsb = pixels[i] & 1; // Get LSB of red channel
+                    currentByte = (currentByte << 1) | lsb;
+                    bitCount++;
+                    
+                    if (bitCount === 8) {
+                        dataBytes.push(currentByte);
+                        currentByte = 0;
+                        bitCount = 0;
+                        dataIndex++;
+                    }
+                }
+                
+                const decodedString = new TextDecoder('utf-8').decode(new Uint8Array(dataBytes));
+                logFunc(`🔐 Decoded string: ${decodedString}`);
+                return decodedString;
+                
+            } catch (error) {
+                logFunc(`❌ Error extracting data: ${error.message}`);
+                return null;
+            }
+        }
+        
+        // Generate test image with steganography
+        function generateTestImage() {
+            const email = document.getElementById('testEmail').value.trim();
+            const memberId = document.getElementById('testMemberId').value.trim();
+            const logId = 'generateLog';
+            
+            if (!email || !memberId) {
+                document.getElementById('generateResult').innerHTML = '<div class="error">❌ Please enter both email and member ID!</div>';
+                return;
+            }
+            
+            // Clear previous logs
+            document.getElementById(logId).textContent = '';
+            log('🎨 Starting test image generation...', logId);
+            
+            try {
+                // Create test data
+                const testData = {
+                    email: email,
+                    memberId: memberId,
+                    timestamp: new Date().toISOString(),
+                    version: "1.0"
+                };
+                
+                const dataString = JSON.stringify(testData);
+                log(`📝 Test data created: ${dataString}`, logId);
+                
+                // Create a simple test image (200x200 gradient)
+                const canvas = document.createElement('canvas');
+                canvas.width = 200;
+                canvas.height = 200;
+                const ctx = canvas.getContext('2d');
+                
+                // Create gradient background
+                const gradient = ctx.createLinearGradient(0, 0, 200, 200);
+                gradient.addColorStop(0, '#667eea');
+                gradient.addColorStop(1, '#764ba2');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, 200, 200);
+                
+                // Add some text
+                ctx.fillStyle = 'white';
+                ctx.font = '16px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('TEST IMAGE', 100, 80);
+                ctx.fillText('With Hidden Data', 100, 120);
+                
+                log('🖼️ Base image created (200x200)', logId);
+                
+                // Get image data and embed steganography
+                const imageData = ctx.getImageData(0, 0, 200, 200);
+                embedDataInImage(imageData, dataString, (msg) => log(msg, logId));
+                
+                // Put modified data back
+                ctx.putImageData(imageData, 0, 0);
+                testImageCanvas = canvas;
+                
+                // Show preview
+                const preview = document.getElementById('generatePreview');
+                preview.innerHTML = '';
+                const img = document.createElement('img');
+                img.src = canvas.toDataURL();
+                img.style.maxWidth = '100%';
+                img.style.border = '2px solid #4caf50';
+                img.style.borderRadius = '8px';
+                preview.appendChild(img);
+                
+                // Show download and verify buttons
+                document.getElementById('downloadBtn').style.display = 'inline-block';
+                document.getElementById('verifyBtn').style.display = 'inline-block';
+                
+                document.getElementById('generateResult').innerHTML = `
+                    <div class="result success">
+                        <h3>✅ Test Image Generated Successfully!</h3>
+                        <p>The image now contains hidden steganography data.</p>
+                        <p>Use the verify button below to test extraction.</p>
+                    </div>
+                `;
+                
+                log('✅ Test image generation completed!', logId);
+                
+            } catch (error) {
+                log(`❌ Error generating test image: ${error.message}`, logId);
+                document.getElementById('generateResult').innerHTML = `<div class="error">❌ Generation failed: ${error.message}</div>`;
+            }
+        }
+        
+        // Embed data in image (LSB steganography)
+        function embedDataInImage(imageData, data, logFunc) {
+            try {
+                const pixels = imageData.data;
+                const dataBytes = new TextEncoder().encode(data);
+                const dataLength = dataBytes.length;
+                
+                logFunc(`🔐 Embedding ${dataLength} bytes of data...`);
+                
+                // First, embed the length (4 bytes)
+                let lengthBytes = [
+                    (dataLength >> 24) & 0xFF,
+                    (dataLength >> 16) & 0xFF,
+                    (dataLength >> 8) & 0xFF,
+                    dataLength & 0xFF
+                ];
+                
+                let pixelIndex = 0;
+                let bitIndex = 0;
+                
+                // Embed length
+                for (let i = 0; i < 4; i++) {
+                    for (let bit = 7; bit >= 0; bit--) {
+                        if (pixelIndex >= pixels.length) {
+                            throw new Error('Image too small for data');
+                        }
+                        
+                        const bitValue = (lengthBytes[i] >> bit) & 1;
+                        pixels[pixelIndex] = (pixels[pixelIndex] & 0xFE) | bitValue;
+                        pixelIndex += 4; // Move to next pixel (red channel only)
+                    }
+                }
+                
+                logFunc('🔐 Data length embedded (32 bits)');
+                
+                // Embed actual data
+                for (let i = 0; i < dataBytes.length; i++) {
+                    for (let bit = 7; bit >= 0; bit--) {
+                        if (pixelIndex >= pixels.length) {
+                            throw new Error('Image too small for data');
+                        }
+                        
+                        const bitValue = (dataBytes[i] >> bit) & 1;
+                        pixels[pixelIndex] = (pixels[pixelIndex] & 0xFE) | bitValue;
+                        pixelIndex += 4; // Move to next pixel (red channel only)
+                    }
+                }
+                
+                logFunc(`🔐 Data embedding completed! Used ${pixelIndex/4} pixels out of ${pixels.length/4}`);
+                
+            } catch (error) {
+                logFunc(`❌ Error embedding data: ${error.message}`);
+                throw error;
+            }
+        }
+        
+        // Download test image
+        function downloadTestImage() {
+            if (!testImageCanvas) {
+                alert('❌ No test image available to download!');
+                return;
+            }
+            
+            const link = document.createElement('a');
+            link.download = 'steganography-test-image.png';
+            link.href = testImageCanvas.toDataURL();
+            link.click();
+            
+            log('💾 Test image downloaded', 'generateLog');
+        }
+        
+        // Verify test image
+        function verifyTestImage() {
+            if (!testImageCanvas) {
+                document.getElementById('verifyResult').innerHTML = '<div class="error">❌ No test image to verify!</div>';
+                return;
+            }
+            
+            const logId = 'verifyLog';
+            document.getElementById(logId).textContent = '';
+            log('🔍 Starting verification of generated test image...', logId);
+            
+            try {
+                const ctx = testImageCanvas.getContext('2d');
+                const imageData = ctx.getImageData(0, 0, testImageCanvas.width, testImageCanvas.height);
+                
+                const extractedData = extractDataFromImage(imageData, (msg) => log(msg, logId));
+                
+                if (extractedData) {
+                    try {
+                        const parsedData = JSON.parse(extractedData);
+                        document.getElementById('verifyResult').innerHTML = `
+                            <div class="result success">
+                                <h3>✅ Verification Successful!</h3>
+                                <p>The steganography system is working correctly!</p>
+                                <p><strong>📧 Email:</strong> ${parsedData.email}</p>
+                                <p><strong>🆔 Member ID:</strong> ${parsedData.memberId}</p>
+                                <p><strong>⏰ Timestamp:</strong> ${parsedData.timestamp}</p>
+                                <p><strong>📌 Version:</strong> ${parsedData.version}</p>
+                            </div>
+                        `;
+                        log('✅ Verification completed successfully!', logId);
+                    } catch (e) {
+                        document.getElementById('verifyResult').innerHTML = `
+                            <div class="result">
+                                <h3>📝 Data Extracted but Not JSON</h3>
+                                <pre>${extractedData}</pre>
+                            </div>
+                        `;
+                        log('⚠️ Extracted data is not valid JSON', logId);
+                    }
+                } else {
+                    document.getElementById('verifyResult').innerHTML = '<div class="error">❌ Verification failed - no data extracted!</div>';
+                    log('❌ Verification failed', logId);
+                }
+                
+            } catch (error) {
+                log(`❌ Error during verification: ${error.message}`, logId);
+                document.getElementById('verifyResult').innerHTML = `<div class="error">❌ Verification error: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

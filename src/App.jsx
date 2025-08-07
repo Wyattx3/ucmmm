@@ -1448,8 +1448,20 @@ function App() {
           console.log('🎨 Parsed result:', parsedResult)
           
           if (parsedResult.success) {
-            // Check if response contains PNG template data (new approach)
-            if (parsedResult.data && parsedResult.data.templateFile) {
+            // Check if response contains steganography-embedded member card
+            if (parsedResult.memberCardImage) {
+              console.log('🔐 Member card with steganography received...')
+              
+              const memberCardData = {
+                imageUrl: parsedResult.memberCardImage,
+                message: parsedResult.message || 'Member card with embedded security data'
+              }
+              
+              setGeneratedMemberCard(memberCardData)
+              showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! 🔐 ✨', 'success')
+            }
+            // Check if response contains PNG template data (old approach)
+            else if (parsedResult.data && parsedResult.data.templateFile) {
               console.log('🎨 Creating member card with PNG template...')
               
               // Override photoUrl with user's publicPhoto (base64) from current form data

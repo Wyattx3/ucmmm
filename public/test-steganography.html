@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UC ERA Steganography Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+        }
+        input[type="file"] {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+        button {
+            background: linear-gradient(45deg, #FF6B6B, #4ECDC4);
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 10px 5px;
+            transition: transform 0.3s ease;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        .result {
+            margin: 15px 0;
+            padding: 15px;
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.2);
+        }
+        .success { border-left: 4px solid #4CAF50; }
+        .error { border-left: 4px solid #f44336; }
+        .info { border-left: 4px solid #2196F3; }
+        pre {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        #memberCardPreview {
+            max-width: 300px;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 UC ERA Steganography Test</h1>
+        <p>Test the steganography features for member card security verification</p>
+
+        <!-- File Upload Section -->
+        <div class="test-section">
+            <h3>📁 Upload Member Card</h3>
+            <input type="file" id="memberCardFile" accept="image/*">
+            <br>
+            <img id="memberCardPreview" style="display: none;">
+        </div>
+
+        <!-- Extraction Test -->
+        <div class="test-section">
+            <h3>🔍 Extract Hidden Data</h3>
+            <button onclick="extractHiddenData()">Extract Data from Member Card</button>
+            <div id="extractionResult"></div>
+        </div>
+
+        <!-- Verification Test -->
+        <div class="test-section">
+            <h3>✅ Verify Member Card</h3>
+            <label>Expected Email:</label>
+            <input type="email" id="expectedEmail" placeholder="user@example.com" style="width: 200px; margin: 5px;">
+            <br>
+            <label>Expected Member ID:</label>
+            <input type="text" id="expectedMemberId" placeholder="1234567" style="width: 200px; margin: 5px;">
+            <br>
+            <button onclick="verifyMemberCard()">Verify Member Card</button>
+            <div id="verificationResult"></div>
+        </div>
+
+        <!-- Test Data Generator -->
+        <div class="test-section">
+            <h3>🎨 Generate Test Member Card</h3>
+            <p>Generate a member card with steganography for testing</p>
+            <label>Test Email:</label>
+            <input type="email" id="testEmail" value="test@ucera.com" style="width: 200px; margin: 5px;">
+            <br>
+            <label>Test Member ID:</label>
+            <input type="text" id="testMemberId" value="TEST123" style="width: 200px; margin: 5px;">
+            <br>
+            <button onclick="generateTestCard()">Generate Test Card</button>
+            <div id="generationResult"></div>
+        </div>
+    </div>
+
+    <!-- Load Steganography Decoder -->
+    <script src="steganography-decoder.js"></script>
+
+    <script>
+        // File input handling
+        document.getElementById('memberCardFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const preview = document.getElementById('memberCardPreview');
+                    preview.src = e.target.result;
+                    preview.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Extract hidden data from uploaded member card
+        async function extractHiddenData() {
+            const fileInput = document.getElementById('memberCardFile');
+            const resultDiv = document.getElementById('extractionResult');
+            
+            if (!fileInput.files[0]) {
+                resultDiv.innerHTML = '<div class="result error">❌ Please select a member card image first</div>';
+                return;
+            }
+
+            try {
+                resultDiv.innerHTML = '<div class="result info">🔍 Extracting hidden data...</div>';
+                
+                const result = await window.UCERASteganography.extractMemberCardData(fileInput.files[0]);
+                
+                if (result.success) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <h4>✅ Hidden Data Extracted Successfully!</h4>
+                            <pre>${JSON.stringify(result.data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div class="result error">❌ Extraction failed: ${result.error}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="result error">❌ Error: ${error.message}</div>`;
+            }
+        }
+
+        // Verify member card authenticity
+        async function verifyMemberCard() {
+            const fileInput = document.getElementById('memberCardFile');
+            const expectedEmail = document.getElementById('expectedEmail').value;
+            const expectedMemberId = document.getElementById('expectedMemberId').value;
+            const resultDiv = document.getElementById('verificationResult');
+            
+            if (!fileInput.files[0]) {
+                resultDiv.innerHTML = '<div class="result error">❌ Please select a member card image first</div>';
+                return;
+            }
+
+            if (!expectedEmail || !expectedMemberId) {
+                resultDiv.innerHTML = '<div class="result error">❌ Please enter expected email and member ID</div>';
+                return;
+            }
+
+            try {
+                resultDiv.innerHTML = '<div class="result info">🔍 Verifying member card...</div>';
+                
+                const result = await window.UCERASteganography.verifyMemberCard(
+                    fileInput.files[0], 
+                    expectedEmail, 
+                    expectedMemberId
+                );
+                
+                if (result.valid) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <h4>✅ Member Card is Valid!</h4>
+                            <p><strong>Email:</strong> ${result.verification.emailMatch ? '✅' : '❌'} Match</p>
+                            <p><strong>Member ID:</strong> ${result.verification.memberIdMatch ? '✅' : '❌'} Match</p>
+                            <pre>${JSON.stringify(result.extractedData, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <h4>❌ Member Card Verification Failed</h4>
+                            <p><strong>Error:</strong> ${result.error || 'Data mismatch'}</p>
+                            ${result.extractedData ? `<pre>${JSON.stringify(result.extractedData, null, 2)}</pre>` : ''}
+                            ${result.verification ? `
+                                <p><strong>Email:</strong> ${result.verification.emailMatch ? '✅' : '❌'} Match</p>
+                                <p><strong>Member ID:</strong> ${result.verification.memberIdMatch ? '✅' : '❌'} Match</p>
+                            ` : ''}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="result error">❌ Verification error: ${error.message}</div>`;
+            }
+        }
+
+        // Generate test member card with steganography
+        async function generateTestCard() {
+            const testEmail = document.getElementById('testEmail').value;
+            const testMemberId = document.getElementById('testMemberId').value;
+            const resultDiv = document.getElementById('generationResult');
+            
+            if (!testEmail || !testMemberId) {
+                resultDiv.innerHTML = '<div class="result error">❌ Please enter test email and member ID</div>';
+                return;
+            }
+
+            try {
+                resultDiv.innerHTML = '<div class="result info">🎨 Generating test member card...</div>';
+                
+                // Create a simple test canvas with steganography
+                const canvas = document.createElement('canvas');
+                canvas.width = 576;
+                canvas.height = 384;
+                const ctx = canvas.getContext('2d');
+                
+                // Create gradient background
+                const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+                gradient.addColorStop(0, '#667eea');
+                gradient.addColorStop(1, '#764ba2');
+                
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Add test text
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 24px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('TEST MEMBER CARD', canvas.width/2, 100);
+                
+                ctx.font = 'bold 18px Arial';
+                ctx.fillText(`Email: ${testEmail}`, canvas.width/2, 200);
+                ctx.fillText(`Member ID: ${testMemberId}`, canvas.width/2, 250);
+                
+                // Get image data for steganography
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                
+                // Embed test data
+                const hiddenData = JSON.stringify({
+                    email: testEmail,
+                    memberId: testMemberId,
+                    timestamp: new Date().toISOString(),
+                    version: '1.0'
+                });
+                
+                // Simple LSB embedding (similar to server-side)
+                const dataBytes = new TextEncoder().encode(hiddenData);
+                const dataLength = dataBytes.length;
+                
+                // Embed data length first (32 bits)
+                const lengthBytes = new Uint8Array(4);
+                lengthBytes[0] = (dataLength >>> 24) & 0xFF;
+                lengthBytes[1] = (dataLength >>> 16) & 0xFF;
+                lengthBytes[2] = (dataLength >>> 8) & 0xFF;
+                lengthBytes[3] = dataLength & 0xFF;
+                
+                const fullData = new Uint8Array(4 + dataLength);
+                fullData.set(lengthBytes, 0);
+                fullData.set(dataBytes, 4);
+                
+                const pixels = imageData.data;
+                let dataIndex = 0;
+                let bitIndex = 0;
+                
+                // Embed in LSB of red channel
+                for (let i = 0; i < pixels.length && dataIndex < fullData.length; i += 4) {
+                    if (dataIndex < fullData.length) {
+                        const bit = (fullData[dataIndex] >>> (7 - bitIndex)) & 1;
+                        pixels[i] = (pixels[i] & 0xFE) | bit;
+                        
+                        bitIndex++;
+                        if (bitIndex === 8) {
+                            bitIndex = 0;
+                            dataIndex++;
+                        }
+                    }
+                }
+                
+                // Put modified data back
+                ctx.putImageData(imageData, 0, 0);
+                
+                // Convert to data URL and display
+                const dataUrl = canvas.toDataURL('image/png');
+                
+                resultDiv.innerHTML = `
+                    <div class="result success">
+                        <h4>✅ Test Member Card Generated!</h4>
+                        <p>Hidden data embedded: ${hiddenData.length} characters</p>
+                        <img src="${dataUrl}" style="max-width: 300px; border-radius: 10px;">
+                        <br>
+                        <button onclick="downloadTestCard('${dataUrl}', '${testMemberId}')">Download Test Card</button>
+                    </div>
+                `;
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="result error">❌ Generation error: ${error.message}</div>`;
+            }
+        }
+
+        // Download test card
+        function downloadTestCard(dataUrl, memberId) {
+            const link = document.createElement('a');
+            link.href = dataUrl;
+            link.download = `UC-ERA-Test-Card-${memberId}.png`;
+            link.click();
+        }
+    </script>
+</body>
+</html>

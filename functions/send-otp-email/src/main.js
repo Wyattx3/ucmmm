@@ -162,7 +162,7 @@ export default async ({ req, res, log, error }) => {
               <div style="text-align: center; margin: 40px 0; background: linear-gradient(45deg, #ff6b35, #ff8c42); padding: 30px; margin: 20px; border-radius: 15px; border: 6px solid #333; box-shadow: 0 8px 0 #222;">
                 <div style="background: #fff; padding: 20px; border-radius: 10px; margin-bottom: 15px; border: 4px solid #333;">
                   <h1 class="pixel-font" style="color: #333; margin: 0; font-size: 24px; text-shadow: 2px 2px 0px #ccc;">🎮 UC ERA 🎮</h1>
-                </div>
+              </div>
                 <p class="pixel-font" style="color: #fff; margin: 0; font-size: 12px; text-shadow: 2px 2px 0px #333;">
                   🍄 Welcome to the Adventure! 🍄
                 </p>

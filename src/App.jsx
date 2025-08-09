@@ -1213,8 +1213,9 @@ function App() {
           setLoadingMessage('Verification code ပို့နေပါသည်...')
           // Send OTP automatically using direct authService with userId
           await authService.sendOTPVerification(userId, formData.email)
-          hideScreenLoading(true) // Immediate hide for smooth transition
           setCurrentScreen('verification')
+          // Hide loading after screen transition for smooth UX
+          setTimeout(() => hideScreenLoading(true), 500)
           showNotification(`Verification code sent to ${formData.email}`, 'success')
           } catch (error) {
             hideScreenLoading()

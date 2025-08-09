@@ -4,10 +4,17 @@ import { useRegistration } from './hooks/useRegistration'
 import CubeLoader from './components/CubeLoader'
 import MemberCard from './components/MemberCard'
 import EyeLoader from './components/EyeLoader'
+import Home from './components/Home'
 import authService from './services/auth.js'
+import Login from './components/Login.jsx'
 
 function App() {
-  const [currentScreen, setCurrentScreen] = useState('welcome') // 'welcome', 'registration', 'dateOfBirth', 'contact', 'verification', 'success', 'passcode', 'passcodeConfirm', 'citizenship', 'city', 'finalSuccess', 'memberCardApplication', 'nameConfirmation', 'relationshipStatus', 'genderSelection', 'favoriteFood', 'favoriteArtist', 'loveLanguage', 'photoUpload', 'existingUserPasscode', 'existingUserLogin'
+  const [loggedInUser, setLoggedInUser] = useState(() => authService.loadSessionUser())
+  const [currentScreen, setCurrentScreen] = useState(() => {
+    // If user is already logged in, go directly to home
+    const savedUser = authService.loadSessionUser()
+    return savedUser ? 'home' : 'welcome'
+  })
   
   // Use registration hook for real API calls
   const {
@@ -705,8 +712,7 @@ function App() {
   }
 
   const handleLogIn = () => {
-    // Show notification for future login implementation
-    showNotification('Login လုပ်နိုင်မှုကို မကြာခင် implement လုပ်ပေးပါမယ်!', 'info')
+    setCurrentScreen('home')
   }
 
   // Name formatting handler - English only, capitalize first letter of each word
@@ -3613,24 +3619,7 @@ function App() {
                 <button 
                   className="go-home-button"
                   onClick={() => {
-                    setCurrentScreen('welcome')
-                    setFormData({
-                      firstName: '',
-                      middleName: '',
-                      lastName: '',
-                      dateOfBirth: '',
-                      email: '',
-                      phoneNumber: '',
-                      relationshipStatus: '',
-                      gender: '',
-                      favoriteFood: [],
-                      favoriteArtist: [],
-                      loveLanguage: '',
-                      privatePhoto: null,
-                      publicPhoto: null,
-                      userId: null
-                    })
-                    setGeneratedMemberCard(null)
+                    setCurrentScreen('home')
                   }}
                 >
                   Go to Home
@@ -3718,6 +3707,23 @@ function App() {
             </button>
           </div>
         </div>
+      </div>
+    )
+  }
+
+  // Home Screen with login guard
+  if (currentScreen === 'home') {
+    if (!loggedInUser) {
+      return <Login onSuccess={(user) => { authService.saveSessionUser(user); setLoggedInUser(user) }} />
+    }
+    return (
+      <div className="app">
+        <Home
+          formData={{ ...formData, firstName: loggedInUser.firstName, publicPhoto: loggedInUser.publicPhoto }}
+          notification={notification}
+          closeNotification={closeNotification}
+          loggedInUser={loggedInUser}
+        />
       </div>
     )
   }

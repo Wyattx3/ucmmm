@@ -2,6 +2,14 @@ import { account, databases, functions, DATABASE_ID, COLLECTIONS, ID, Query } fr
 import storageService from './storage.js';
 
 class AuthService {
+    // Session helpers (persist logged-in user in localStorage)
+    saveSessionUser(user) {
+        try { localStorage.setItem('ucera_session_user', JSON.stringify(user)) } catch {}
+    }
+    loadSessionUser() {
+        try { const raw = localStorage.getItem('ucera_session_user'); return raw ? JSON.parse(raw) : null } catch { return null }
+    }
+    clearSessionUser() { try { localStorage.removeItem('ucera_session_user') } catch {} }
     // Generate unique 7-digit Member ID
     async generateMemberID() {
         try {
@@ -46,6 +54,58 @@ class AuthService {
         } catch (error) {
             console.error('❌ Error generating Member ID:', error);
             throw new Error('Failed to generate Member ID: ' + error.message);
+        }
+    }
+
+    // Find user by member ID
+    async getUserByMemberID(memberID) {
+        try {
+            const normalized = String(memberID).trim()
+            const res = await databases.listDocuments(
+                DATABASE_ID,
+                COLLECTIONS.USERS,
+                [Query.equal('memberID', normalized)]
+            );
+            if (!res.documents.length) {
+                throw new Error('Member ID မတွေ့ရှိပါ');
+            }
+            return { success: true, data: res.documents[0] };
+        } catch (error) {
+            console.error('❌ Error getUserByMemberID:', error);
+            throw new Error('Member ID ဖြင့် user မတွေ့ပါ: ' + error.message);
+        }
+    }
+
+    // Find user by email (lowercased)
+    async getUserByEmail(email) {
+        try {
+            const res = await databases.listDocuments(
+                DATABASE_ID,
+                COLLECTIONS.USERS,
+                [Query.equal('email', String(email).toLowerCase())]
+            );
+            if (!res.documents.length) {
+                throw new Error('Email မတွေ့ရှိပါ');
+            }
+            return { success: true, data: res.documents[0] };
+        } catch (error) {
+            console.error('❌ Error getUserByEmail:', error);
+            throw new Error('Email ဖြင့် user မတွေ့ပါ: ' + error.message);
+        }
+    }
+
+    // Login with memberID + passcode
+    async loginWithMemberIDAndPasscode(memberID, passcode) {
+        try {
+            const userRes = await this.getUserByMemberID(memberID);
+            const user = userRes.data;
+            // Verify passcode
+            await this.verifyExistingUserPasscode(user.$id, passcode);
+            return { success: true, data: user };
+        } catch (error) {
+            console.error('❌ Login failed');
+            // Do not surface server/internal messages directly to user
+            throw new Error('လော့ဂ်အင် မအောင်မြင်ပါ');
         }
     }
 

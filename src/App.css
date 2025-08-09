@@ -955,8 +955,8 @@ body {
 .passcode-dots {
   display: flex;
   justify-content: center;
-  gap: 16px;
-  margin-bottom: 60px;
+  gap: clamp(12px, 3.5vw, 24px);
+  margin-bottom: clamp(30px, 9vh, 60px);
 }
 
 .passcode-dot {
@@ -996,25 +996,25 @@ body {
 .number-pad {
   display: flex;
   flex-direction: column;
-  gap: 15px;
-  margin-bottom: 40px;
+  gap: clamp(12px, 3vw, 20px);
+  margin-bottom: clamp(24px, 8vh, 48px);
   align-items: center;
 }
 
 .number-row {
   display: flex;
   justify-content: center;
-  gap: 40px;
+  gap: clamp(24px, 8vw, 44px);
 }
 
 .number-button {
-  width: 64px;
-  height: 64px;
+  width: clamp(64px, 16vw, 88px);
+  height: clamp(64px, 16vw, 88px);
   border-radius: 50%;
   border: none;
   background-color: #f8f9fa;
   color: #1f2937;
-  font-size: 24px;
+  font-size: clamp(20px, 5vw, 26px);
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1558,14 +1558,11 @@ body {
     font-size: 11px;
   }
 
-  .number-row {
-    gap: 40px;
-  }
-
+  .number-row { gap: clamp(20px, 10vw, 40px); }
   .number-button {
-    width: 56px;
-    height: 56px;
-    font-size: 20px;
+    width: clamp(60px, 20vw, 80px);
+    height: clamp(60px, 20vw, 80px);
+    font-size: clamp(18px, 5.5vw, 24px);
   }
 
   .passcode-dots {

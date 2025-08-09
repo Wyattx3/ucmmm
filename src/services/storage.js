@@ -1,6 +1,16 @@
 import { storage, account, ID, Permission, Role, STORAGE_BUCKETS } from '../lib/appwrite.js';
 
 class StorageService {
+    // Create message document in Appwrite database (production)
+    async createMessage(databases, databaseId, collectionId, payload) {
+        try {
+            const result = await databases.createDocument(databaseId, collectionId, ID.unique(), payload)
+            return { success: true, data: result }
+        } catch (error) {
+            console.error('❌ Error creating message:', error)
+            throw new Error('Failed to create message: ' + error.message)
+        }
+    }
     // Convert base64 to blob
     base64ToBlob(base64Data, contentType = 'image/jpeg') {
         try {

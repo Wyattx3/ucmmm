@@ -18,7 +18,9 @@ export const COLLECTIONS = {
     REGISTRATIONS: 'registrations',
     OTP_CODES: 'otp_codes',
     ETHNIC_GROUPS: 'ethnic_groups',
-    CITIES: 'cities'
+    CITIES: 'cities',
+    GROUPS: 'groups',
+    MESSAGES: 'messages'
 };
 
 // Storage Bucket IDs (Optimized for Free Plan - Single Bucket)

@@ -1,18 +1,23 @@
 import js from '@eslint/js'
-import globals from 'globals'
+import react from 'eslint-plugin-react'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
-import { defineConfig, globalIgnores } from 'eslint/config'
+import globals from 'globals'
 
-export default defineConfig([
-  globalIgnores(['dist']),
+export default [
+  { 
+    ignores: [
+      'dist', 
+      'functions/**/*', 
+      'public/steganography-decoder.js',
+      '*.config.js',
+      'create-test-users.js',
+      'setup-messages-collection.js',
+      'test-*.js'
+    ] 
+  },
   {
     files: ['**/*.{js,jsx}'],
-    extends: [
-      js.configs.recommended,
-      reactHooks.configs['recommended-latest'],
-      reactRefresh.configs.vite,
-    ],
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
@@ -22,8 +27,31 @@ export default defineConfig([
         sourceType: 'module',
       },
     },
+    settings: { react: { version: '18.2' } },
+    plugins: {
+      react,
+      'react-hooks': reactHooks,
+      'react-refresh': reactRefresh,
+    },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      ...js.configs.recommended.rules,
+      ...react.configs.recommended.rules,
+      ...react.configs['jsx-runtime'].rules,
+      ...reactHooks.configs.recommended.rules,
+      'react/jsx-no-target-blank': 'off',
+      'react-refresh/only-export-components': [
+        'warn',
+        { allowConstantExport: true },
+      ],
+      // Production-ready rules
+      'no-console': 'warn',
+      'no-debugger': 'error',
+      'no-unused-vars': ['error', { 'argsIgnorePattern': '^_', 'varsIgnorePattern': '^_' }],
+      'prefer-const': 'error',
+      'no-var': 'error',
+      'react/prop-types': 'off', // Disable for now in production setup
+      'no-control-regex': 'off', // Allow for steganography usage
+      'no-empty': 'warn',
     },
   },
-])
+]

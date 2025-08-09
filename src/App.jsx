@@ -7,6 +7,7 @@ import EyeLoader from './components/EyeLoader'
 import Home from './components/Home'
 import authService from './services/auth.js'
 import Login from './components/Login.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 
 function App() {
   const [loggedInUser, setLoggedInUser] = useState(() => authService.loadSessionUser())
@@ -3713,10 +3714,15 @@ function App() {
 
   // Home Screen with login guard
   if (currentScreen === 'home') {
-    if (!loggedInUser) {
-      return <Login onSuccess={(user) => { authService.saveSessionUser(user); setLoggedInUser(user) }} />
-    }
+      if (!loggedInUser) {
     return (
+      <ErrorBoundary>
+        <Login onSuccess={(user) => { authService.saveSessionUser(user); setLoggedInUser(user) }} />
+      </ErrorBoundary>
+    )
+  }
+  return (
+    <ErrorBoundary>
       <div className="app">
         <Home
           formData={{ ...formData, firstName: loggedInUser.firstName, publicPhoto: loggedInUser.publicPhoto }}
@@ -3725,62 +3731,65 @@ function App() {
           loggedInUser={loggedInUser}
         />
       </div>
-    )
+    </ErrorBoundary>
+  )
   }
 
   // Add debug logging
   return (
-    <div className="app">
-      <div className="container">
-        {notification.show && (
-          <div className={`notification ${notification.type}`}>
-            <span className="notification-message">{notification.message}</span>
-            <button className="notification-close" onClick={closeNotification}>×</button>
+    <ErrorBoundary>
+      <div className="app">
+        <div className="container">
+          {notification.show && (
+            <div className={`notification ${notification.type}`}>
+              <span className="notification-message">{notification.message}</span>
+              <button className="notification-close" onClick={closeNotification}>×</button>
+            </div>
+          )}
+          
+          {screenLoading && (
+            <div className="screen-loading-overlay">
+              <CubeLoader message={loadingMessage} />
+            </div>
+          )}
+          
+          <div className="welcome-section">
+            <h1 className="welcome-text">
+              Welcome to<br />
+              UC ERA
+            </h1>
           </div>
-        )}
-        
-        {screenLoading && (
-          <div className="screen-loading-overlay">
-            <CubeLoader message={loadingMessage} />
+          
+          {/* Logo positioned in absolute center of entire app */}
+          <div className="logo-center">
+            <img 
+              src="/ucera-logo.png" 
+              alt="UC ERA Logo" 
+              className="ucera-logo"
+            />
           </div>
-        )}
-        
-        <div className="welcome-section">
-          <h1 className="welcome-text">
-            Welcome to<br />
-            UC ERA
-          </h1>
-        </div>
-        
-        {/* Logo positioned in absolute center of entire app */}
-        <div className="logo-center">
-          <img 
-            src="/ucera-logo.png" 
-            alt="UC ERA Logo" 
-            className="ucera-logo"
-          />
-        </div>
-        
-        <div className="background-design">
-          <div className="curve-shape"></div>
-        </div>
-        
-        <div className="action-section">
-          <button 
-            className={`join-button ${isLoading ? 'loading' : ''}`}
-            onClick={handleJoinUCEra}
-            disabled={isLoading}
-          >
-              <span className="button-text">
-            {isLoading ? 'Please wait...' : 'Join UC Era'}
-              </span>
-          </button>
-          <p className="login-link" onClick={handleLogIn}>
-            Log In
-          </p>
+          
+          <div className="background-design">
+            <div className="curve-shape"></div>
+          </div>
+          
+          <div className="action-section">
+            <button 
+              className={`join-button ${isLoading ? 'loading' : ''}`}
+              onClick={handleJoinUCEra}
+              disabled={isLoading}
+            >
+                <span className="button-text">
+              {isLoading ? 'Please wait...' : 'Join UC Era'}
+                </span>
+            </button>
+            <p className="login-link" onClick={handleLogIn}>
+              Log In
+            </p>
+          </div>
         </div>
       </div>
-    </div>
+    </ErrorBoundary>
   )
 }
 

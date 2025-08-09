@@ -1214,9 +1214,9 @@ function App() {
           // Send OTP automatically using direct authService with userId
           await authService.sendOTPVerification(userId, formData.email)
           setCurrentScreen('verification')
-          // Hide loading after screen transition for smooth UX
-          setTimeout(() => hideScreenLoading(true), 500)
           showNotification(`Verification code sent to ${formData.email}`, 'success')
+          // Hide loading after notification shows for smooth UX
+          setTimeout(() => hideScreenLoading(true), 800)
           } catch (error) {
             hideScreenLoading()
             

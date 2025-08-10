@@ -7,6 +7,7 @@ import MemberCard from './components/MemberCard'
 import EyeLoader from './components/EyeLoader'
 import Home from './components/Home'
 import authService from './services/auth.js'
+import storageService from './services/storage.js'
 import Login from './components/Login.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 
@@ -728,6 +729,29 @@ function App() {
   // Show notification function
   const showNotification = (message, type = 'error') => {
     setNotification({ show: true, message, type })
+  }
+
+  // Backup member card to storage
+  const backupMemberCardToStorage = async (userId, memberCardImageUrl) => {
+    try {
+      console.log('💾 Starting member card backup to storage for user:', userId)
+      
+      // Don't backup if no imageUrl or if it's not a base64 data URL
+      if (!memberCardImageUrl || !memberCardImageUrl.startsWith('data:image/')) {
+        console.log('⚠️ Skipping backup: Member card is not a base64 data URL')
+        return null
+      }
+      
+      const backupResult = await storageService.uploadMemberCard(userId, memberCardImageUrl)
+      console.log('✅ Member card backed up successfully:', backupResult.fileId)
+      
+      return backupResult
+    } catch (error) {
+      console.error('❌ Failed to backup member card:', error)
+      // Don't throw error to avoid interrupting the main flow
+      // Just log the error - backup is optional
+      return null
+    }
   }
 
   // Auto-hide notification after 5 seconds
@@ -1612,6 +1636,10 @@ function App() {
               }
               
               setGeneratedMemberCard(memberCardData)
+              
+              // Backup to storage (non-blocking)
+              backupMemberCardToStorage(userId, parsedResult.memberCardImage)
+              
               showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! 🔐 ✨', 'success')
             }
             // Check if response contains PNG template data with or without steganography
@@ -1641,6 +1669,9 @@ function App() {
               
               setGeneratedMemberCard(memberCardData)
               
+              // Backup to storage (non-blocking)
+              backupMemberCardToStorage(userId, imageUrl)
+              
               // Show appropriate notification based on steganography inclusion
               if (parsedResult.data.steganographyData) {
                 showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! 🔐 ✨', 'success')
@@ -1659,10 +1690,21 @@ function App() {
               }
               
               setGeneratedMemberCard(memberCardData)
+              
+              // Backup to storage (non-blocking)
+              backupMemberCardToStorage(userId, imageUrl)
+              
               showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! ✨', 'success')
             } else {
               // Use debug data if this is test function, otherwise use actual data
-              setGeneratedMemberCard(parsedResult.data || parsedResult.debug)
+              const memberCardData = parsedResult.data || parsedResult.debug
+              setGeneratedMemberCard(memberCardData)
+              
+              // Backup to storage (non-blocking) if imageUrl exists
+              if (memberCardData?.imageUrl) {
+                backupMemberCardToStorage(userId, memberCardData.imageUrl)
+              }
+              
               showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! ✨', 'success')
             }
           } else {

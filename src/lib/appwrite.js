@@ -27,7 +27,8 @@ export const COLLECTIONS = {
 export const STORAGE_BUCKETS = {
     PRIVATE_PHOTOS: 'private-photos',
     PUBLIC_PHOTOS: 'private-photos',  // Same bucket, different file-level permissions
-    CHAT_IMAGES: 'chat-images'        // Dedicated bucket for chat images
+    CHAT_IMAGES: 'chat-images',       // Dedicated bucket for chat images
+    MEMBER_CARDS: 'member-cards'      // Dedicated bucket for member card backups
 };
 
 // Helper to generate unique IDs and Query objects

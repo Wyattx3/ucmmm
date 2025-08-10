@@ -1,4 +1,4 @@
-import { storage, account, ID, Permission, Role, STORAGE_BUCKETS } from '../lib/appwrite.js';
+import { storage, account, ID, Permission, Role, Query, STORAGE_BUCKETS } from '../lib/appwrite.js';
 
 class StorageService {
     // Upload chat image and return permanent URL
@@ -191,6 +191,104 @@ class StorageService {
     // Get file download URL (for download)
     getFileDownloadURL(bucketId, fileId) {
         return `${import.meta.env.VITE_APPWRITE_ENDPOINT}/storage/buckets/${bucketId}/files/${fileId}/download?project=${import.meta.env.VITE_APPWRITE_PROJECT_ID}`;
+    }
+
+    // Upload member card backup
+    async uploadMemberCard(userId, memberCardBase64) {
+        try {
+            console.log('🎴 Uploading member card backup for user:', userId);
+            
+            // Get the current session user ID for permissions
+            let currentUserId = null;
+            let hasSession = false;
+            
+            try {
+                const currentSession = await account.getSession('current');
+                const currentUser = await account.get();
+                currentUserId = currentUser.$id;
+                hasSession = true;
+                console.log('✅ Existing session found for member card backup, current user:', currentUserId);
+            } catch (sessionError) {
+                console.log('ℹ️ No existing session, creating anonymous session for member card backup...');
+                try {
+                    await account.createAnonymousSession();
+                    hasSession = true;
+                    console.log('✅ Anonymous session created for member card backup');
+                    // For anonymous sessions, use broader permissions
+                } catch (anonError) {
+                    console.warn('⚠️ Could not create anonymous session:', anonError.message);
+                    console.log('📝 Proceeding with member card backup without session...');
+                }
+            }
+            
+            // Convert base64 to blob
+            const blob = this.base64ToBlob(memberCardBase64);
+            const fileName = `${userId}_member_card_${Date.now()}.png`;
+            const file = new File([blob], fileName, { type: 'image/png' });
+            
+            // Set permissions based on session type
+            let permissions = [];
+            if (currentUserId) {
+                // Use the actual current session user ID for permissions
+                permissions = [
+                    Permission.read(Role.user(currentUserId)),
+                    Permission.delete(Role.user(currentUserId))
+                ];
+                console.log('🔒 Using user-specific permissions for:', currentUserId);
+            } else {
+                // For anonymous sessions or no session, use broader permissions
+                permissions = [
+                    Permission.read(Role.any()),
+                    Permission.delete(Role.any())
+                ];
+                console.log('🔓 Using broad permissions for anonymous backup');
+            }
+            
+            // Upload to Member Cards bucket
+            const result = await storage.createFile(
+                STORAGE_BUCKETS.MEMBER_CARDS,
+                ID.unique(),
+                file,
+                permissions
+            );
+            
+            console.log('✅ Member card backup uploaded successfully:', result.$id);
+            
+            return {
+                fileId: result.$id,
+                fileName: result.name,
+                size: result.sizeOriginal,
+                url: this.getFileViewURL(STORAGE_BUCKETS.MEMBER_CARDS, result.$id),
+                downloadUrl: this.getFileDownloadURL(STORAGE_BUCKETS.MEMBER_CARDS, result.$id)
+            };
+        } catch (error) {
+            console.error('❌ Error uploading member card backup:', error);
+            throw new Error('Member card backup failed: ' + error.message);
+        }
+    }
+
+    // Get user's member card backups
+    async getUserMemberCards(userId) {
+        try {
+            console.log('🔍 Getting member card backups for user:', userId);
+            
+            const files = await storage.listFiles(
+                STORAGE_BUCKETS.MEMBER_CARDS,
+                [Query.startsWith('name', `${userId}_member_card_`)]
+            );
+            
+            return files.files.map(file => ({
+                fileId: file.$id,
+                fileName: file.name,
+                size: file.sizeOriginal,
+                createdAt: file.$createdAt,
+                url: this.getFileViewURL(STORAGE_BUCKETS.MEMBER_CARDS, file.$id),
+                downloadUrl: this.getFileDownloadURL(STORAGE_BUCKETS.MEMBER_CARDS, file.$id)
+            }));
+        } catch (error) {
+            console.error('❌ Error getting member card backups:', error);
+            throw new Error('Failed to get member card backups: ' + error.message);
+        }
     }
 
     // Delete photo

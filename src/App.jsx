@@ -3534,7 +3534,7 @@ function App() {
                 <div className="photo-upload-area">
                   {formData.publicPhoto ? (
                     <div className="photo-preview">
-                      <img src={formData.publicPhoto} alt="Public" className="preview-image member-card-ratio" />
+                                              <img src={formData.publicPhoto} alt="Public" className="preview-image member-card-ratio" style={{imageRendering: 'crisp-edges'}} />
                       <button 
                         className="change-photo-btn"
                         onClick={() => document.getElementById('public-photo-input').click()}

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import client, { databases, DATABASE_ID, COLLECTIONS, ID, Query } from '../lib/appwrite.js'
 import storageService from '../services/storage.js'
+import presenceService from '../services/presence.js'
 import './Home.css'
 import styled from 'styled-components'
 import BottomNav from './BottomNav'
@@ -51,6 +52,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
   // Load real members from database (groups collection or users)
   const [allMembers, setAllMembers] = useState([])
   const [lastMsgByChat, setLastMsgByChat] = useState({})
+  const [memberStatus, setMemberStatus] = useState({})
   useEffect(() => {
     (async () => {
       try {
@@ -64,6 +66,27 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
           .filter(d => d.$id !== loggedInUser?.$id) // Exclude logged in user
           .map((d, idx) => ({ id: d.$id || `u-${idx}`, name: d.fullName || d.firstName || 'Member', publicPhoto: d.publicPhoto || null }))
         setAllMembers(mapped)
+
+        // Load member status after getting members
+        if (mapped.length > 0) {
+          const userIds = mapped.map(m => m.id);
+          try {
+            const statusMap = await presenceService.getBulkUserStatus(userIds);
+            setMemberStatus(statusMap);
+          } catch (e) {
+            console.warn('Member status loading failed, using fallback:', e.message);
+            // Provide fallback status for all members
+            const fallbackStatus = {};
+            userIds.forEach(id => {
+              fallbackStatus[id] = {
+                isOnline: false,
+                lastSeen: null,
+                status: 'Status loading...'
+              };
+            });
+            setMemberStatus(fallbackStatus);
+          }
+        }
       } catch (e) {
         console.warn('Could not load members from DB:', e.message)
         setAllMembers([])
@@ -77,44 +100,70 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
       if (!allMembers.length) return
       console.log(`🔍 Loading last messages for ${allMembers.length} members`)
       try {
-        const results = await Promise.all(
-          allMembers.slice(0, 50).map(async (m) => {
-            try {
-              // Use consistent chat ID (sorted user IDs)
-              const chatId = [loggedInUser?.$id, m.id].sort().join('_')
-              const r = await databases.listDocuments(
-                DATABASE_ID,
-                COLLECTIONS.MESSAGES,
-                [Query.equal('chatId', chatId), Query.orderDesc('createdAt'), Query.limit(1)]
-              )
-              const d = r.documents[0]
-              if (!d) {
-                console.log(`📭 No messages found for member ${m.name} (chatId: ${chatId})`)
+        // Process members in small batches to prevent network overload
+        const BATCH_SIZE = 2
+        const members = allMembers.slice(0, 8) // Limit to reduce API calls
+        const results = []
+        
+        for (let i = 0; i < members.length; i += BATCH_SIZE) {
+          const batch = members.slice(i, i + BATCH_SIZE)
+          
+          // Add delay between batches to prevent overwhelming the API
+          if (i > 0) {
+            await new Promise(resolve => setTimeout(resolve, 300))
+          }
+          
+          const batchResults = await Promise.allSettled(
+            batch.map(async (m) => {
+              try {
+                const chatId = [loggedInUser?.$id, m.id].sort().join('_')
+                const r = await databases.listDocuments(
+                  DATABASE_ID,
+                  COLLECTIONS.MESSAGES,
+                  [Query.equal('chatId', chatId), Query.orderDesc('createdAt'), Query.limit(1)]
+                )
+                const d = r.documents[0]
+                if (!d) {
+                  console.log(`📭 No messages found for member ${m.name} (chatId: ${chatId})`)
+                  return [chatId, null]
+                }
+                const when = new Date(d.createdAt || d.$createdAt)
+                const lastMsg = { 
+                  text: d.text, 
+                  imageUrl: d.imageUrl,
+                  time: when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                }
+                console.log(`📬 Last message for ${m.name} (chatId: ${chatId}):`, lastMsg)
+                return [chatId, lastMsg]
+              } catch (e) {
+                // Reduce console spam for network errors
+                if (!e.message.includes('Load failed') && !e.message.includes('network connection was lost')) {
+                  console.warn(`❌ Failed to load last message for ${m.name}:`, e.message)
+                }
+                const chatId = [loggedInUser?.$id, m.id].sort().join('_')
                 return [chatId, null]
               }
-              const when = new Date(d.createdAt || d.$createdAt)
-              const lastMsg = { 
-                text: d.text, 
-                imageUrl: d.imageUrl,
-                time: when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-              }
-              console.log(`📬 Last message for ${m.name} (chatId: ${chatId}):`, lastMsg)
-              return [chatId, lastMsg]
-            } catch (e) {
-              console.warn(`❌ Failed to load last message for ${m.name}:`, e.message)
-              const chatId = [loggedInUser?.$id, m.id].sort().join('_')
-              return [chatId, null]
+            })
+          )
+          
+          // Add successful results
+          batchResults.forEach((result) => {
+            if (result.status === 'fulfilled' && result.value) {
+              results.push(result.value)
             }
           })
-        )
+        }
         const map = {}
         results.forEach(([id, v]) => { map[id] = v })
         setLastMsgByChat(map)
         console.log(`✅ Last messages loaded:`, map)
       } catch (e) {
-        console.warn('Load last messages failed:', e.message)
-        if (e.message.includes('Collection with the requested ID could not be found')) {
-          console.warn('⚠️ Messages collection missing. See MESSAGES_COLLECTION_SETUP.md for setup instructions.')
+        // Reduce console spam for network errors
+        if (!e.message.includes('Load failed') && !e.message.includes('network connection was lost')) {
+          console.warn('Load last messages failed:', e.message)
+          if (e.message.includes('Collection with the requested ID could not be found')) {
+            console.warn('⚠️ Messages collection missing. See MESSAGES_COLLECTION_SETUP.md for setup instructions.')
+          }
         }
       }
     })()
@@ -142,6 +191,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
   const messagesAreaRef = useRef(null)
   const [keyboardOffset, setKeyboardOffset] = useState(0)
   const [isTyping, setIsTyping] = useState(false)
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false)
   const composerRef = useRef(null)
   // Dynamic padding to keep composer above bottom nav
   const [navOverlayPad, setNavOverlayPad] = useState(12)
@@ -223,22 +273,39 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
     scrollToBottom(true)
   }, [messagesByChat, openChat])
 
-  // Load messages for open chat from DB
+  // Optimized message loading with caching and instant UI
   useEffect(() => {
     if (!openChat) return
     
+    // Show loading state immediately
+    setIsLoadingMessages(true)
+    
     const loadMessages = async () => {
       try {
-        console.log(`🔍 Loading messages for chat: ${openChat.id}`)
+        console.log(`⚡ Loading messages for chat: ${openChat.id}`)
+        
+        // Use cached messages if available for instant display
+        const cachedMessages = messagesByChat[openChat.id]
+        if (cachedMessages && cachedMessages.length > 0) {
+          console.log(`📦 Using cached messages (${cachedMessages.length}) for instant display`)
+          setIsLoadingMessages(false)
+          // Still fetch latest from DB in background
+        }
+        
         const res = await databases.listDocuments(
           DATABASE_ID,
           COLLECTIONS.MESSAGES,
-          [Query.equal('chatId', openChat.id), Query.orderAsc('createdAt')]
+          [
+            Query.equal('chatId', openChat.id), 
+            Query.orderAsc('createdAt'), 
+            Query.limit(50) // Reduced limit for faster loading
+          ]
         )
-        console.log(`📝 Found ${res.documents.length} messages for chat ${openChat.id}`)
+        
+        console.log(`📝 Loaded ${res.documents.length} messages from database`)
+        
         const messages = res.documents.map(d => {
           const isMe = d.senderId === loggedInUser?.$id;
-          console.log(`📋 Message from ${d.senderName}: senderId=${d.senderId}, currentUser=${loggedInUser?.$id}, isMe=${isMe}`);
           
           return {
             id: d.$id,
@@ -247,15 +314,41 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
             time: new Date(d.createdAt || d.$createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             senderName: d.senderName,
             senderAvatar: d.senderAvatar,
-            imageUrl: d.imageUrl
+            imageUrl: d.imageUrl,
+            dbSaved: true
           };
         })
-        setMessagesByChat(prev => ({ ...prev, [openChat.id]: messages }))
-        console.log(`✅ Messages loaded for chat ${openChat.id}:`, messages)
+
+        // Smart merge: preserve temp messages and avoid duplicates
+        setMessagesByChat(prev => {
+          const currentMessages = prev[openChat.id] || []
+          const tempMessages = currentMessages.filter(msg => msg.id.startsWith('temp_') && !msg.dbSaved)
+          
+          // Deduplicate: remove any cached messages that exist in fresh DB results
+          const dbMessageIds = new Set(messages.map(m => m.id))
+          const nonDuplicateCurrentMessages = currentMessages.filter(msg => 
+            !dbMessageIds.has(msg.id) && msg.id.startsWith('temp_')
+          )
+          
+          const finalMessages = [...messages, ...nonDuplicateCurrentMessages]
+          
+          if (tempMessages.length > 0) {
+            console.log(`🔄 Preserving ${tempMessages.length} unsaved messages`)
+          }
+          
+          return { ...prev, [openChat.id]: finalMessages }
+        })
+        
+        setIsLoadingMessages(false)
+        console.log(`✅ Chat ${openChat.id} loaded successfully`)
+        
       } catch (e) {
         console.warn('Failed to load messages:', e.message)
-        if (e.message.includes('Collection with the requested ID could not be found')) {
-          console.warn('⚠️ Messages collection not found. Please create it using MESSAGES_COLLECTION_SETUP.md')
+        setIsLoadingMessages(false)
+        
+        // Keep any cached messages on error
+        if (!messagesByChat[openChat.id] || messagesByChat[openChat.id].length === 0) {
+          console.log('🔄 No cached messages available, showing empty state')
         }
       }
     }
@@ -266,74 +359,249 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
   // Create ref for openChat to avoid re-subscriptions
   const openChatRef = useRef(openChat)
   openChatRef.current = openChat
+  
+  // Message deduplication tracking
+  const processedMessageIds = useRef(new Set())
+  const lastProcessedTime = useRef(0)
+  
+  // Subscription management to prevent multiple subscriptions
+  const activeSubscriptionRef = useRef(null)
 
-  // Global realtime subscription for all messages (separate from chat opening)
+  // Stable realtime subscription with connection management
   useEffect(() => {
     if (!loggedInUser) return
     
-    console.log(`🔔 Setting up global realtime subscription for user ${loggedInUser.firstName}`)
-    const unsubscribe = client.subscribe(
-      [`databases.${DATABASE_ID}.collections.${COLLECTIONS.MESSAGES}.documents`],
-      (response) => {
-        console.log('📡 Global realtime event received:', response.events)
-        if (response.events.includes('databases.*.collections.*.documents.*.create')) {
-          const newMessage = response.payload
-          console.log('💬 New message received globally:', newMessage)
-          console.log(`🔍 Current user ID: ${loggedInUser?.$id}, Message sender ID: ${newMessage.senderId}`)
+    let subscriptionActive = true
+    let retryCount = 0
+    const maxRetries = 3
+    
+    const createSubscription = () => {
+      if (!subscriptionActive) return null
+      
+      // Prevent multiple active subscriptions
+      if (activeSubscriptionRef.current) {
+        console.log('⚠️ Subscription already active, skipping')
+        return activeSubscriptionRef.current
+      }
+      
+      console.log(`🔔 Setting up realtime subscription for user ${loggedInUser.firstName} (attempt ${retryCount + 1})`)
+      
+      try {
+        const unsubscribe = client.subscribe(
+          [`databases.${DATABASE_ID}.collections.${COLLECTIONS.MESSAGES}.documents`],
+          (response) => {
+          // Only log important events, not all events
+          if (response.events.some(event => event.includes('.create'))) {
+            console.log('📡 Message creation event received')
+          }
           
-          // Update last message for all chats (this always happens)
-          setLastMsgByChat(prev => ({
-            ...prev,
-            [newMessage.chatId]: {
-              text: newMessage.text,
-              imageUrl: newMessage.imageUrl,
-              time: new Date(newMessage.createdAt || newMessage.$createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          // Check for document creation events
+          const isCreate = response.events.some(event => 
+            event.includes('.create') && event.includes('messages')
+          )
+          
+          if (isCreate && response.payload) {
+            const newMessage = response.payload
+            const messageId = newMessage.$id
+            const currentTime = Date.now()
+            
+            // Deduplication: Skip if we've already processed this message recently
+            if (processedMessageIds.current.has(messageId)) {
+              console.log('🔄 Skipping duplicate message:', messageId)
+              return
             }
-          }))
-          console.log(`📬 Updated last message for chat ${newMessage.chatId}`)
-          
-          // Get current openChat from ref to avoid stale closure
-          const currentOpenChat = openChatRef.current
-          
-          // If it's for the currently open chat and NOT from current user, add to messages
-          if (currentOpenChat && newMessage.chatId === currentOpenChat.id && newMessage.senderId !== loggedInUser?.$id) {
-            const message = {
-              id: newMessage.$id,
-              text: newMessage.text,
-              from: 'other',
-              time: new Date(newMessage.createdAt || newMessage.$createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              senderName: newMessage.senderName,
-              senderAvatar: newMessage.senderAvatar,
-              imageUrl: newMessage.imageUrl
+            
+            // Clean old message IDs every 30 seconds to prevent memory leaks
+            if (currentTime - lastProcessedTime.current > 30000) {
+              processedMessageIds.current.clear()
+              lastProcessedTime.current = currentTime
             }
-            console.log('➕ Adding received message to current chat:', message)
-            setMessagesByChat(prev => ({
+            
+            // Add to processed set
+            processedMessageIds.current.add(messageId)
+            
+            console.log('💬 New message received:', {
+              id: messageId,
+              chatId: newMessage.chatId,
+              text: newMessage.text,
+              from: newMessage.senderName,
+              senderId: newMessage.senderId
+            })
+          
+            // ALWAYS update last message for chat list (regardless of who sent it)
+            setLastMsgByChat(prev => ({
               ...prev,
-              [currentOpenChat.id]: [...(prev[currentOpenChat.id] || []), message]
+              [newMessage.chatId]: {
+                text: newMessage.text,
+                imageUrl: newMessage.imageUrl,
+                time: new Date(newMessage.createdAt || newMessage.$createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                isFromMe: newMessage.senderId === loggedInUser?.$id
+              }
             }))
             
-            // Auto-scroll to bottom when new message arrives
-            setTimeout(() => {
-              if (messagesEndRef.current) {
-                messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+            // Get current openChat from ref to avoid stale closure
+            const currentOpenChat = openChatRef.current
+            
+            // Add to current chat messages if it's the open chat and NOT from current user
+            if (currentOpenChat && newMessage.chatId === currentOpenChat.id) {
+              if (newMessage.senderId !== loggedInUser?.$id) {
+                // Check for duplicates in current messages
+                setMessagesByChat(prev => {
+                  const currentMessages = prev[currentOpenChat.id] || []
+                  const messageExists = currentMessages.some(msg => msg.id === messageId)
+                  
+                  if (messageExists) {
+                    console.log('🔄 Message already exists in current chat:', messageId)
+                    return prev
+                  }
+                  
+                  const message = {
+                    id: messageId,
+                    text: newMessage.text,
+                    from: 'other',
+                    time: new Date(newMessage.createdAt || newMessage.$createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    senderName: newMessage.senderName,
+                    senderAvatar: newMessage.senderAvatar,
+                    imageUrl: newMessage.imageUrl,
+                    dbSaved: true
+                  }
+                  
+                  console.log('⚡ Adding received message to current chat:', message.text)
+                  return {
+                    ...prev,
+                    [currentOpenChat.id]: [...currentMessages, message]
+                  }
+                })
+                
+                // Instant scroll to bottom for new messages
+                requestAnimationFrame(() => {
+                  if (messagesEndRef.current) {
+                    messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+                  }
+                })
+              } else {
+                console.log('✅ Own message confirmed in database')
               }
-            }, 100)
-          } else if (newMessage.senderId === loggedInUser?.$id) {
-            console.log('🚫 Ignoring own message to prevent duplication')
-          } else if (!currentOpenChat) {
-            console.log('📝 No chat open, only updating last message')
-          } else if (newMessage.chatId !== currentOpenChat.id) {
-            console.log(`📝 Message for different chat (${newMessage.chatId}), only updating last message`)
+            } else {
+              console.log(`📝 Message for ${newMessage.chatId === currentOpenChat?.id ? 'current' : 'different'} chat, updating chat list only`)
+            }
           }
         }
+        )
+        
+        // Store active subscription reference
+        activeSubscriptionRef.current = unsubscribe
+        
+        return unsubscribe
+      } catch (error) {
+        console.warn('❌ Failed to create subscription:', error.message)
+        
+        if (retryCount < maxRetries && subscriptionActive) {
+          retryCount++
+          console.log(`🔄 Retrying subscription in 2 seconds... (${retryCount}/${maxRetries})`)
+          setTimeout(() => createSubscription(), 2000)
+        }
+        
+        return null
       }
-    )
+    }
+    
+    // Add small delay to prevent rapid re-subscriptions during hot reloads
+    const subscriptionDelay = setTimeout(() => {
+      createSubscription()
+    }, 200)
     
     return () => {
-      console.log('🔌 Unsubscribing from global realtime')
-      unsubscribe()
+      subscriptionActive = false
+      clearTimeout(subscriptionDelay)
+      
+      // Clean up active subscription
+      if (activeSubscriptionRef.current) {
+        console.log('🔌 Cleaning up active subscription')
+        activeSubscriptionRef.current()
+        activeSubscriptionRef.current = null
+      }
     }
   }, [loggedInUser]) // Only depend on loggedInUser, not openChat
+
+  // Initialize presence tracking for current user
+  useEffect(() => {
+    if (loggedInUser?.$id) {
+      presenceService.startPresence(loggedInUser.$id);
+      
+      return () => {
+        presenceService.stopPresence();
+      };
+    }
+  }, [loggedInUser]);
+
+  // Realtime updates for member online status (instant UI updates)
+  useEffect(() => {
+    if (!loggedInUser || allMembers.length === 0) return;
+
+    const unsubscribe = client.subscribe(
+      [`databases.${DATABASE_ID}.collections.${COLLECTIONS.USERS}.documents`],
+      (response) => {
+        // Only handle updates
+        if (!response?.events?.some((e) => e.includes('.update'))) return;
+
+        const updatedUser = response.payload;
+        const userId = updatedUser?.$id;
+        if (!userId) return;
+
+        // Only track users shown in the member list
+        const isInList = allMembers.some((m) => m.id === userId);
+        if (!isInList) return;
+
+        const lastSeen = updatedUser.lastSeen ? new Date(updatedUser.lastSeen) : null;
+        const isOnlineFlag = Boolean(updatedUser.isOnline);
+        const ONLINE_THRESHOLD = 3 * 60 * 1000; // 3 minutes
+        const isRecentlyActive = lastSeen && (Date.now() - lastSeen.getTime()) < ONLINE_THRESHOLD;
+        const isOnlineEffective = isOnlineFlag && isRecentlyActive;
+        const statusText = presenceService.getStatusText(isOnlineEffective, lastSeen);
+
+        setMemberStatus((prev) => ({
+          ...prev,
+          [userId]: {
+            isOnline: isOnlineEffective,
+            lastSeen,
+            status: statusText,
+          },
+        }));
+      }
+    );
+
+    return () => {
+      try { unsubscribe(); } catch {}
+    };
+  }, [loggedInUser, allMembers]);
+
+  // Periodically update member status (every 2 minutes)
+  useEffect(() => {
+    if (allMembers.length === 0) return;
+
+    const updateMemberStatus = async () => {
+      try {
+        const userIds = allMembers.map(m => m.id);
+        const statusMap = await presenceService.getBulkUserStatus(userIds);
+        setMemberStatus(prev => ({...prev, ...statusMap})); // Merge instead of replace to prevent flickering
+      } catch (error) {
+        console.warn('Failed to update member status:', error.message);
+        // Don't clear status on failure - keep existing status
+      }
+    };
+
+    // Initial update after a longer delay to let network settle
+    const initialUpdate = setTimeout(updateMemberStatus, 10000);
+    
+    // Update status every 5 minutes (less frequent to reduce load)
+    const statusInterval = setInterval(updateMemberStatus, 5 * 60 * 1000);
+
+    return () => {
+      clearTimeout(initialUpdate);
+      clearInterval(statusInterval);
+    };
+  }, [allMembers]);
 
   useEffect(() => {
     try { localStorage.setItem('ucera_seen', JSON.stringify(seenByChat)) } catch {}
@@ -443,7 +711,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
         <HeaderLeft>
           <ProfileButton aria-label="Profile" onClick={() => setShowProfile(true)}>
             {formData.publicPhoto ? (
-              <img src={formData.publicPhoto} alt="Profile" />
+              <img src={formData.publicPhoto} alt="Profile" style={{imageRendering: 'crisp-edges'}} />
             ) : (
               <span className="fallback">👤</span>
             )}
@@ -479,8 +747,28 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                     <ThreadHeader>
                       <BackBtn onClick={() => setOpenChat(null)} aria-label="Back">←</BackBtn>
                       <div className="meta">
-                        <div className="name">{openChat.name}</div>
-                        <div className="sub">{openChat.isGroup ? 'Group' : 'Online'}</div>
+                        <div className="name" style={{display:'flex',alignItems:'center',gap:8}}>
+                          {openChat.name}
+                          {!openChat.isGroup && openChat.otherUserId && memberStatus[openChat.otherUserId]?.isOnline && (
+                            <div style={{
+                              width:8,
+                              height:8,
+                              borderRadius:'50%',
+                              background:'#22c55e',
+                              flexShrink:0
+                            }}></div>
+                          )}
+                        </div>
+                        <div className="sub">
+                          {openChat.isGroup 
+                            ? 'Group' 
+                            : openChat.otherUserId && memberStatus[openChat.otherUserId]
+                              ? memberStatus[openChat.otherUserId].isOnline 
+                                ? 'Active now' 
+                                : memberStatus[openChat.otherUserId].status
+                              : 'Loading...'
+                          }
+                        </div>
                       </div>
                       <HeaderActions>
                         <ThemeSelect value={chatTheme} onChange={(e)=>setChatTheme(e.target.value)} aria-label="Theme">
@@ -493,7 +781,28 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                     </ThreadHeader>
 
                     <MessagesArea ref={messagesAreaRef} $areaBg={palette.areaBg} $bottomPad={keyboardOffset} $navPad={navPad}>
-                      {(messagesByChat[openChat.id] || []).map((m, index) => (
+                      {isLoadingMessages && (!messagesByChat[openChat.id] || messagesByChat[openChat.id].length === 0) ? (
+                        <div style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '40px 20px',
+                          color: '#64748b',
+                          fontSize: '14px'
+                        }}>
+                          <div style={{
+                            width: '32px',
+                            height: '32px',
+                            border: '3px solid #e2e8f0',
+                            borderTop: '3px solid #3b82f6',
+                            borderRadius: '50%',
+                            animation: 'spin 1s linear infinite',
+                            marginBottom: '12px'
+                          }}></div>
+                          Loading messages...
+                        </div>
+                      ) : (messagesByChat[openChat.id] || []).map((m, index) => (
                         <MessageRow 
                           key={`${openChat.id}-${m.id}-${index}`} 
                           $me={m.from === 'me'} 
@@ -505,32 +814,101 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                           <div className="message-container">
                           {openChat.isGroup && m.from !== 'me' && (
                               <div className="sender" style={{display:'flex',alignItems:'center',gap:8}}>
-                                <div style={{width:26,height:26,borderRadius:'9999px',overflow:'hidden',background:'#eef2ff',display:'grid',placeItems:'center',fontSize:14}}>
-                                  {m.senderAvatar ? (
-                                    <img src={m.senderAvatar} alt={m.senderName} style={{width:'100%',height:'100%',objectFit:'cover'}} />
-                                  ) : '👤'}
+                                <div style={{position:'relative'}}>
+                                  <div style={{width:26,height:26,borderRadius:'9999px',overflow:'hidden',background:'#eef2ff',display:'grid',placeItems:'center',fontSize:14}}>
+                                    {m.senderAvatar ? (
+                                      <img src={m.senderAvatar} alt={m.senderName} style={{width:'100%',height:'100%',objectFit:'cover'}} />
+                                    ) : '👤'}
+                                  </div>
+                                  {/* Active status indicator */}
+                                  {m.senderId && memberStatus[m.senderId]?.isOnline && (
+                                    <div style={{
+                                      position:'absolute',
+                                      bottom:'-2px',
+                                      right:'-2px',
+                                      width:10,
+                                      height:10,
+                                      borderRadius:'50%',
+                                      background:'#22c55e',
+                                      border:'2px solid white',
+                                      boxShadow:'0 1px 3px rgba(0,0,0,0.12)'
+                                    }}></div>
+                                  )}
                                 </div>
                                 <div style={{fontWeight:700,color:'#0f172a'}}>{m.senderName || 'Member'}</div>
+                                {m.senderId && memberStatus[m.senderId] && (
+                                  <div style={{fontSize:11,color:'#64748b',fontWeight:400}}>
+                                    {memberStatus[m.senderId].isOnline ? 'Active now' : memberStatus[m.senderId].status}
+                                  </div>
+                                )}
                               </div>
                             )}
                             {!openChat.isGroup && m.from === 'other' && (
                               <div className="sender" style={{display:'flex',alignItems:'center',gap:8}}>
-                                <div style={{width:24,height:24,borderRadius:'50%',overflow:'hidden',background:'#f1f5f9',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}}>
-                                  {m.senderAvatar ? (
-                                    <img src={m.senderAvatar} alt={m.senderName} style={{width:'100%',height:'100%',objectFit:'cover'}} />
-                                  ) : '👤'}
+                                <div style={{position:'relative'}}>
+                                  <div style={{width:24,height:24,borderRadius:'50%',overflow:'hidden',background:'#f1f5f9',display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}}>
+                                    {m.senderAvatar ? (
+                                      <img src={m.senderAvatar} alt={m.senderName} style={{width:'100%',height:'100%',objectFit:'cover'}} />
+                                    ) : '👤'}
+                                  </div>
+                                  {/* Active status indicator for one-on-one chats */}
+                                  {m.senderId && memberStatus[m.senderId]?.isOnline && (
+                                    <div style={{
+                                      position:'absolute',
+                                      bottom:'-1px',
+                                      right:'-1px',
+                                      width:8,
+                                      height:8,
+                                      borderRadius:'50%',
+                                      background:'#22c55e',
+                                      border:'2px solid white',
+                                      boxShadow:'0 1px 2px rgba(0,0,0,0.12)'
+                                    }}></div>
+                                  )}
                                 </div>
                                 <div style={{fontWeight:600,color:'#475569',fontSize:13}}>{m.senderName || openChat.name}</div>
+                                {m.senderId && memberStatus[m.senderId] && (
+                                  <div style={{fontSize:10,color:'#64748b',fontWeight:400}}>
+                                    {memberStatus[m.senderId].isOnline ? 'Active now' : memberStatus[m.senderId].status}
+                                  </div>
+                                )}
                               </div>
                           )}
                           {m.text && <div className="bubble text">{m.text}</div>}
                           {m.imageUrl && (
                             <div className="bubble image"><img src={m.imageUrl} alt="sent" /></div>
                           )}
-                          <div className="time">{m.time}</div>
+                          <div className="time" style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
+                            {m.time}
+                            {m.from === 'me' && (
+                              <span style={{fontSize: '11px', opacity: 0.7}}>
+                                {m.failed ? (
+                                  <span style={{color: '#ef4444'}} title="Failed to send">❌</span>
+                                ) : m.id.startsWith('temp_') ? (
+                                  m.dbSaved ? '✓✓' : '⏳'
+                                ) : '✓✓'}
+                              </span>
+                            )}
+                          </div>
                           </div>
                         </MessageRow>
                       ))}
+                      
+                      {/* Typing indicator for other users */}
+                      {isTyping && (
+                        <MessageRow $me={false} $otherBg={palette.otherBg} $otherColor={palette.otherColor}>
+                          <div className="message-container">
+                            <div className="bubble text" style={{
+                              opacity: 0.7,
+                              background: palette.otherBg,
+                              animation: 'pulse 1.5s ease-in-out infinite'
+                            }}>
+                              <span style={{fontSize: '14px'}}>⏳</span> typing...
+                            </div>
+                          </div>
+                        </MessageRow>
+                      )}
+                      
                       <div ref={messagesEndRef} />
                     </MessagesArea>
 
@@ -627,8 +1005,28 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                   <ThreadHeader>
                     <BackBtn onClick={() => setOpenChat(null)} aria-label="Back">←</BackBtn>
                     <div className="meta">
-                      <div className="name">{openChat.name}</div>
-                      <div className="sub">{openChat.isGroup ? 'Group' : 'Online'}</div>
+                      <div className="name" style={{display:'flex',alignItems:'center',gap:8}}>
+                        {openChat.name}
+                        {!openChat.isGroup && openChat.otherUserId && memberStatus[openChat.otherUserId]?.isOnline && (
+                          <div style={{
+                            width:8,
+                            height:8,
+                            borderRadius:'50%',
+                            background:'#22c55e',
+                            flexShrink:0
+                          }}></div>
+                        )}
+                      </div>
+                      <div className="sub">
+                        {openChat.isGroup 
+                          ? 'Group' 
+                          : openChat.otherUserId && memberStatus[openChat.otherUserId]
+                            ? memberStatus[openChat.otherUserId].isOnline 
+                              ? 'Active now' 
+                              : memberStatus[openChat.otherUserId].status
+                            : 'Loading...'
+                        }
+                      </div>
                     </div>
                     <HeaderActions>
                       <ThemeSelect value={chatTheme} onChange={(e)=>setChatTheme(e.target.value)} aria-label="Theme">
@@ -776,10 +1174,10 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                           }
                         }, 50)
                         
-                        // 5. Background database save (non-blocking)
-                        setTimeout(async () => {
+                        // 5. Immediate database save (optimized for real-time)
+                        const saveMessage = async () => {
                           try {
-                            console.log(`📤 Sending message to chat ${openChat.id}:`, entry.text)
+                            console.log(`⚡ Sending message instantly to chat ${openChat.id}:`, entry.text)
                             const newDoc = await databases.createDocument(
                               DATABASE_ID,
                               COLLECTIONS.MESSAGES,
@@ -792,28 +1190,40 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                                 senderName: loggedInUser?.firstName,
                                 senderAvatar: loggedInUser?.publicPhoto,
                                 imageUrl: entry.imageUrl
-                                // Frontend determines 'from' based on senderId vs current user
                               }
                             )
-                            console.log('✅ Message sent to database successfully:', newDoc.$id)
+                            console.log('✅ Message saved to database:', newDoc.$id)
                             
-                            // Update the temp message with real ID
+                            // Update temp message with real database info
                             setMessagesByChat(prev => ({
                               ...prev,
                               [openChat.id]: (prev[openChat.id] || []).map(msg => 
-                                msg.id === entry.id ? { ...msg, id: newDoc.$id } : msg
+                                msg.id === entry.id ? { 
+                                  ...msg, 
+                                  id: newDoc.$id,
+                                  createdAt: newDoc.createdAt,
+                                  dbSaved: true 
+                                } : msg
                               )
                             }))
                             
+                            console.log(`📊 Message confirmed: ${entry.text}`)
+                            
                           } catch (e) { 
-                            console.warn('❌ DB create message failed:', e.message)
-                            if (e.message.includes('Collection with the requested ID could not be found')) {
-                              console.error('🚨 SETUP REQUIRED: Messages collection not found!')
-                              console.info('📋 Run: See MESSAGES_COLLECTION_SETUP.md for production setup')
-                            }
-                            // Keep message in UI even if DB fails (offline-first approach)
+                            console.warn('❌ Failed to save message:', e.message)
+                            
+                            // Mark message as failed but keep in UI
+                            setMessagesByChat(prev => ({
+                              ...prev,
+                              [openChat.id]: (prev[openChat.id] || []).map(msg => 
+                                msg.id === entry.id ? { ...msg, failed: true } : msg
+                              )
+                            }))
                           }
-                        }, 0)
+                        }
+                        
+                        // Execute database save
+                        saveMessage()
                       }}
                     >Send</SendBtn>
                   </Composer>
@@ -847,14 +1257,37 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                   console.log(`🔄 Opening chat with ${m.name}. ChatID: ${chatId} (User A: ${loggedInUser?.$id}, User B: ${m.id})`)
                   setOpenChat({ id: chatId, name: m.name, isGroup: false, otherUserId: m.id })
                 }}>
-                  <div className="avatar" style={{width: '48px', height: '48px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1f5f9', fontSize: '20px'}}>
+                  <div className="avatar" style={{width: '48px', height: '48px', borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1f5f9', fontSize: '20px', position: 'relative'}}>
                     {m.publicPhoto ? (
-                      <img src={m.publicPhoto} alt={m.name} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+                      <img src={m.publicPhoto} alt={m.name} style={{width: '100%', height: '100%', objectFit: 'cover', imageRendering: 'crisp-edges'}} />
                     ) : '👤'}
+                    {/* Active status indicator - Messenger style */}
+                    {memberStatus[m.id]?.isOnline && (
+                      <div 
+                        style={{
+                          position: 'absolute',
+                          bottom: '2px',
+                          right: '2px',
+                          width: '14px',
+                          height: '14px',
+                          borderRadius: '50%',
+                          backgroundColor: '#22c55e',
+                          border: '3px solid white',
+                          boxSizing: 'border-box',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.12)'
+                        }}
+                        title="Active now"
+                      />
+                    )}
                   </div>
                   <div className="center">
                     <div className="name">{m.name}</div>
-                    <div className="sub">{getLastMessagePreview(lastMsgByChat[chatId])} • {lastMsgByChat[chatId]?.time || '—'}</div>
+                    <div className="sub">
+                      {lastMsgByChat[chatId] ? 
+                        `${getLastMessagePreview(lastMsgByChat[chatId])} • ${lastMsgByChat[chatId]?.time || '—'}` : 
+                        memberStatus[m.id]?.isOnline ? 'Active now' : (memberStatus[m.id]?.status || 'No messages yet')
+                      }
+                    </div>
                   </div>
                   <RightMeta>
                     <span className="time">{lastMsgByChat[chatId]?.time || ''}</span>
@@ -918,7 +1351,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
             <ProfileCard>
               <div className="photo">
                 {formData.publicPhoto ? (
-                  <img src={formData.publicPhoto} alt="Profile" />
+                  <img src={formData.publicPhoto} alt="Profile" style={{imageRendering: 'crisp-edges'}} />
                 ) : (
                   <span>👤</span>
                 )}
@@ -1442,6 +1875,11 @@ const AttachLabel = styled.label`
   @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+  }
+  
+  @keyframes pulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
   }
 `
 

@@ -324,7 +324,7 @@ class StorageService {
     }
 
     // Compress and validate photo before upload
-    async processPhotoForUpload(photoBase64, maxSizeKB = 1024, quality = 0.8) {
+    async processPhotoForUpload(photoBase64, maxSizeKB = 1024, quality = 0.8, options = {}) {
         return new Promise((resolve, reject) => {
             try {
                 const img = new Image();
@@ -332,36 +332,54 @@ class StorageService {
                     const canvas = document.createElement('canvas');
                     const ctx = canvas.getContext('2d');
                     
-                    // Calculate new dimensions (max 1080p)
+                    // Calculate new dimensions with improved logic
                     let { width, height } = img;
-                    const maxWidth = 1080;
-                    const maxHeight = 1080;
+                    const maxWidth = options.preserveOriginalSize ? width : (options.maxWidth || 1080);
+                    const maxHeight = options.preserveOriginalSize ? height : (options.maxHeight || 1080);
                     
+                    // Only resize if image is larger than limits
                     if (width > maxWidth || height > maxHeight) {
                         const ratio = Math.min(maxWidth / width, maxHeight / height);
-                        width *= ratio;
-                        height *= ratio;
+                        width = Math.round(width * ratio);
+                        height = Math.round(height * ratio);
                     }
                     
                     // Set canvas size
                     canvas.width = width;
                     canvas.height = height;
                     
-                    // Draw and compress
+                    // Use better image rendering for quality
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = 'high';
+                    
+                    // Draw image with high quality
                     ctx.drawImage(img, 0, 0, width, height);
                     
-                    // Convert to base64 with compression
-                    const compressedBase64 = canvas.toDataURL('image/jpeg', quality);
+                    // Choose format based on quality needs
+                    const format = options.useOriginalQuality ? 'image/png' : 'image/jpeg';
+                    const finalQuality = options.useOriginalQuality ? 1.0 : quality;
+                    
+                    // Convert to base64 with specified format and quality
+                    let compressedBase64 = canvas.toDataURL(format, finalQuality);
                     
                     // Check file size
                     const sizeKB = (compressedBase64.length * 0.75) / 1024; // Approximate size
                     
-                    if (sizeKB > maxSizeKB) {
-                        // Further compress if still too large
-                        const newQuality = Math.max(0.3, quality * (maxSizeKB / sizeKB));
+                    // For original quality mode, allow larger files but still have limits
+                    const actualMaxSize = options.useOriginalQuality ? (maxSizeKB * 3) : maxSizeKB;
+                    
+                    if (sizeKB > actualMaxSize && !options.useOriginalQuality) {
+                        // Only compress further if not in original quality mode
+                        const newQuality = Math.max(0.5, quality * (maxSizeKB / sizeKB));
                         const finalBase64 = canvas.toDataURL('image/jpeg', newQuality);
+                        console.log(`📸 Photo compressed from ${Math.round(sizeKB)}KB to ${Math.round((finalBase64.length * 0.75) / 1024)}KB`);
                         resolve(finalBase64);
                     } else {
+                        if (options.useOriginalQuality && sizeKB > actualMaxSize) {
+                            // For original quality, try one high-quality JPEG compression
+                            compressedBase64 = canvas.toDataURL('image/jpeg', 0.95);
+                            console.log(`📸 Original quality photo compressed to ${Math.round((compressedBase64.length * 0.75) / 1024)}KB`);
+                        }
                         resolve(compressedBase64);
                     }
                 };
@@ -371,6 +389,17 @@ class StorageService {
             } catch (error) {
                 reject(error);
             }
+        });
+    }
+    
+    // New method specifically for high-quality member card photos
+    async processPublicPhotoForMemberCard(photoBase64) {
+        console.log('📸 Processing public photo with original quality preservation...');
+        return this.processPhotoForUpload(photoBase64, 2048, 0.98, {
+            useOriginalQuality: true,
+            maxWidth: 2048,  // Higher resolution for member cards
+            maxHeight: 2048,
+            preserveOriginalSize: false // Allow some resizing for very large images
         });
     }
 }

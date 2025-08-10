@@ -595,14 +595,12 @@ class AuthService {
             }
             
             if (memberCardData.publicPhoto) {
-                console.log('📸 Processing public photo for base64 storage...');
-                // Compress public photo but don't upload to cloud storage
-                compressedPublicPhoto = await storageService.processPhotoForUpload(
-                    memberCardData.publicPhoto,
-                    1024, // 1MB max  
-                    0.9   // 90% quality (higher quality for member card display)
+                console.log('📸 Processing public photo with original quality preservation...');
+                // Use high-quality processing specifically for member card display
+                compressedPublicPhoto = await storageService.processPublicPhotoForMemberCard(
+                    memberCardData.publicPhoto
                 );
-                console.log('📸 Public photo compressed for database storage');
+                console.log('📸 High-quality public photo processed for member card display');
             }
             
             // Process and validate member card data before database update

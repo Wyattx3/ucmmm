@@ -10,6 +10,18 @@ class AuthService {
         try { const raw = localStorage.getItem('ucera_session_user'); return raw ? JSON.parse(raw) : null } catch { return null }
     }
     clearSessionUser() { try { localStorage.removeItem('ucera_session_user') } catch {} }
+
+    async hardLogout() {
+        try {
+            // Clear local session
+            this.clearSessionUser()
+            // Try to delete Appwrite session (best-effort)
+            try { await account.deleteSession('current') } catch {}
+            return { success: true }
+        } catch {
+            return { success: false }
+        }
+    }
     // Generate unique 7-digit Member ID
     async generateMemberID() {
         try {

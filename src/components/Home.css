@@ -1,7 +1,10 @@
 /* Home Screen Styles */
 .home-container {
   width: 100%;
-  height: 100vh;
+  /* Safer viewport height for mobile; prevents bottom buttons being hidden */
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -199,7 +202,7 @@
 
 .navigation-bar {
   position: fixed;
-  bottom: 0;
+  bottom: calc(8px + env(safe-area-inset-bottom) + var(--bottom-ui-offset, 0px));
   left: 50%;
   transform: translateX(-50%);
   width: 100%;
@@ -208,8 +211,9 @@
   border-top: 1px solid #e2e8f0;
   display: flex;
   justify-content: space-around;
-  padding: 12px 0;
+  padding: 12px 0 8px 0;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 16px 16px 0 0;
 }
 
 .nav-button {

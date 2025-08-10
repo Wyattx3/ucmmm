@@ -7,7 +7,10 @@
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   background-color: #f8f9fa;
-  height: 100vh;
+  /* Use mobile-safe viewport heights so bottom UI bars don't hide content */
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
   overflow: hidden;
 }
 
@@ -25,7 +28,10 @@ body {
 }
 
 .app {
-  height: 100vh;
+  /* Ensure full-height layout respects mobile browser UI */
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -35,7 +41,10 @@ body {
 .container {
   width: 100%;
   max-width: 390px;
-  height: 100vh;
+  /* Avoid 100vh issues on mobile (toolbars overlapping bottom area) */
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -456,7 +465,8 @@ body {
 
 .curve-shape {
   position: absolute;
-  bottom: -50%;
+  /* Lift the curve so it doesn't collide with fixed action-section */
+  bottom: -40%;
   left: -20%;
   width: 140%;
   height: 80%;
@@ -466,20 +476,21 @@ body {
 }
 
 .action-section {
-  position: absolute;
-  bottom: 0;
+  position: fixed;
   left: 0;
   right: 0;
-  padding: 40px;
-  z-index: 3;
+  bottom: calc(env(safe-area-inset-bottom) + var(--bottom-ui-offset, 0px));
+  /* Keep the section fully inside the visible area on mobile */
+  padding: 24px 40px 24px 40px;
+  z-index: 10;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
+  gap: 16px;
 }
 
 .join-button {
-  width: 100%;
+  width: min(92%, 560px);
   padding: 18px 24px;
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
   color: white;
@@ -753,6 +764,7 @@ body {
   cursor: pointer;
   transition: color 0.3s ease;
   margin: 0;
+  padding-bottom: calc(env(safe-area-inset-bottom) + var(--bottom-ui-offset, 0px));
   user-select: none;
 }
 
@@ -797,7 +809,7 @@ body {
 
 .form-content {
   flex: 1;
-  padding: 40px 24px;
+  padding: 40px 24px calc(120px + env(safe-area-inset-bottom) + var(--bottom-ui-offset, 0px));
   overflow-y: auto;
 }
 
@@ -1430,8 +1442,16 @@ body {
 }
 
 .form-footer {
-  padding: 24px;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  padding: 16px 24px calc(16px + env(safe-area-inset-bottom) + var(--bottom-ui-offset, 0px));
   border-top: 1px solid #f1f3f4;
+  z-index: 100;
+  max-width: 390px;
+  margin: 0 auto;
 }
 
 .next-button {
@@ -1481,7 +1501,7 @@ body {
   }
 
   .form-content {
-    padding: 30px 20px;
+    padding: 30px 20px calc(120px + env(safe-area-inset-bottom) + var(--bottom-ui-offset, 0px));
   }
 
   .form-header {
@@ -1489,7 +1509,7 @@ body {
   }
 
   .form-footer {
-    padding: 20px;
+    padding: 16px 20px calc(16px + env(safe-area-inset-bottom) + var(--bottom-ui-offset, 0px));
   }
 
   .birth-title {

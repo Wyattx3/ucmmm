@@ -23,10 +23,11 @@ export const COLLECTIONS = {
     MESSAGES: 'messages'
 };
 
-// Storage Bucket IDs (Optimized for Free Plan - Single Bucket)
+// Storage Bucket IDs (Pro Plan - Multiple Buckets)
 export const STORAGE_BUCKETS = {
     PRIVATE_PHOTOS: 'private-photos',
-    PUBLIC_PHOTOS: 'private-photos'  // Same bucket, different file-level permissions
+    PUBLIC_PHOTOS: 'private-photos',  // Same bucket, different file-level permissions
+    CHAT_IMAGES: 'chat-images'        // Dedicated bucket for chat images
 };
 
 // Helper to generate unique IDs and Query objects

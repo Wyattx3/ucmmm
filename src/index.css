@@ -21,7 +21,10 @@ html, body {
 }
 
 #root {
-  height: 100vh;
+  /* Support mobile-safe viewport heights */
+  min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
   margin: 0;
   padding: 0;
 }

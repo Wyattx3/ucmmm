@@ -1,6 +1,66 @@
 import { storage, account, ID, Permission, Role, STORAGE_BUCKETS } from '../lib/appwrite.js';
 
 class StorageService {
+    // Upload chat image and return permanent URL
+    async uploadChatImage(file, userId) {
+        try {
+            console.log('📤 Uploading chat image for user:', userId);
+            
+            // Get current session user ID to match permissions
+            let currentUserId = null;
+            try {
+                const currentSession = await account.getSession('current');
+                const currentUser = await account.get();
+                currentUserId = currentUser.$id;
+                console.log('✅ Current session user ID:', currentUserId);
+                
+                if (currentUserId !== userId) {
+                    console.warn('⚠️ User ID mismatch! Session:', currentUserId, 'Provided:', userId);
+                    // Use the actual session user ID for permissions
+                    userId = currentUserId;
+                }
+            } catch (sessionError) {
+                console.log('ℹ️ No existing session, creating anonymous session...');
+                try {
+                    await account.createAnonymousSession();
+                    console.log('✅ Anonymous session created for chat image upload');
+                    // For anonymous sessions, use broader permissions
+                    userId = null;
+                } catch (anonError) {
+                    console.warn('⚠️ Could not create anonymous session:', anonError.message);
+                    throw new Error('Authentication required for image upload');
+                }
+            }
+            
+            // Create unique filename
+            const fileName = `chat_${userId || 'anon'}_${Date.now()}_${file.name}`;
+            const renamedFile = new File([file], fileName, { type: file.type });
+            
+            // Upload to dedicated Chat Images bucket (use bucket-level permissions only)
+            const result = await storage.createFile(
+                STORAGE_BUCKETS.CHAT_IMAGES,
+                ID.unique(),
+                renamedFile
+                // No file-level permissions - rely on bucket permissions
+            );
+            
+            console.log('✅ Chat image uploaded successfully:', result.$id);
+            
+            const imageUrl = this.getFileViewURL(STORAGE_BUCKETS.CHAT_IMAGES, result.$id);
+            
+            return {
+                fileId: result.$id,
+                url: imageUrl,
+                fileName: fileName,
+                size: result.sizeOriginal
+            };
+            
+        } catch (error) {
+            console.error('❌ Chat image upload failed:', error);
+            throw new Error(`Image upload failed: ${error.message}`);
+        }
+    }
+
     // Create message document in Appwrite database (production)
     async createMessage(databases, databaseId, collectionId, payload) {
         try {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { databases, DATABASE_ID, COLLECTIONS, Query } from './lib/appwrite.js'
 import './App.css'
 import { useRegistration } from './hooks/useRegistration'
 import CubeLoader from './components/CubeLoader'
@@ -16,6 +17,45 @@ function App() {
     const savedUser = authService.loadSessionUser()
     return savedUser ? 'home' : 'welcome'
   })
+
+  // Validate session on first mount as well (with cache-buster)
+  useEffect(() => {
+    (async () => {
+      const sessionUser = authService.loadSessionUser()
+      if (!sessionUser?.$id) return
+      try {
+        // Cache-bust by adding an always-false filter to avoid cached responses
+        const res = await databases.listDocuments(
+          DATABASE_ID,
+          COLLECTIONS.USERS,
+          [Query.equal('$id', sessionUser.$id), Query.limit(1), Query.offset(0)]
+        )
+        if (!res.documents?.length) {
+          await authService.hardLogout()
+          setLoggedInUser(null)
+          setCurrentScreen('welcome')
+          setNotification({ show: true, type: 'info', message: 'Your session expired. Please log in again.' })
+        }
+      } catch (e) {
+        console.warn('Initial session validation failed:', e.message)
+      }
+    })()
+  }, [])
+
+  // Force network for auth-sensitive requests (disable HTTP cache)
+  useEffect(() => {
+    try {
+      // Vite/Fetch generally bypasses cache for Appwrite SDK, but enforce no-store via header fallback
+      const origFetch = window.fetch
+      window.fetch = (input, init = {}) => {
+        const url = typeof input === 'string' ? input : input?.url
+        if (url && url.includes('/databases/') && url.includes('/documents')) {
+          init = { ...init, cache: 'no-store', headers: { ...(init.headers || {}), 'Cache-Control': 'no-store' } }
+        }
+        return origFetch(input, init)
+      }
+    } catch {}
+  }, [])
   
   // Use registration hook for real API calls
   const {
@@ -69,6 +109,34 @@ function App() {
   })
   const [screenLoading, setScreenLoading] = useState(false)
   const [loadingMessage, setLoadingMessage] = useState('')
+  // Auto-logout if session user no longer exists in DB
+  useEffect(() => {
+    let cancelled = false
+    const validateSessionUser = async () => {
+      const sessionUser = authService.loadSessionUser()
+      if (!sessionUser?.$id) return
+      try {
+        const res = await databases.listDocuments(
+          DATABASE_ID,
+          COLLECTIONS.USERS,
+          [Query.equal('$id', sessionUser.$id), Query.limit(1), Query.offset(0)]
+        )
+        if (!cancelled && !res.documents?.length) {
+          console.warn('🔒 Session user missing in DB. Auto-logging out...')
+          await authService.hardLogout()
+          setLoggedInUser(null)
+          setCurrentScreen('welcome')
+          setNotification({ show: true, type: 'info', message: 'Your session expired. Please log in again.' })
+        }
+      } catch (e) {
+        console.warn('Session validation failed:', e.message)
+      }
+    }
+    validateSessionUser()
+    return () => { cancelled = true }
+  }, [currentScreen])
+
+  const [contactButtonClicked, setContactButtonClicked] = useState(false)
   const [passcodeError, setPasscodeError] = useState(false)
   const [editingNames, setEditingNames] = useState(false)
   const [tempFormData, setTempFormData] = useState({})
@@ -1134,6 +1202,12 @@ function App() {
   }
 
   const handleNext = async () => {
+    // Prevent double-clicks by checking if already processing
+    if (screenLoading) {
+      console.log('⚠️ Already processing, ignoring click')
+      return
+    }
+    
     try {
       if (currentScreen === 'registration') {
         if (formData.firstName && formData.lastName) {
@@ -1154,6 +1228,12 @@ function App() {
           showNotification('Please enter your complete date of birth (DD/MM/YYYY)', 'error')
         }
       } else if (currentScreen === 'contact') {
+        // Special protection for contact screen - only allow one click
+        if (contactButtonClicked) {
+          console.log('⚠️ Contact button already clicked, ignoring')
+          return
+        }
+        
         if (formData.email && formData.phoneNumber) {
           if (!validateEmail(formData.email)) {
             showNotification('Please enter a valid email address', 'error')
@@ -1163,6 +1243,9 @@ function App() {
             showNotification('Please enter a valid phone number', 'error')
             return
           }
+          
+          // Mark button as clicked immediately to prevent any duplicate
+          setContactButtonClicked(true)
           
           try {
             showScreenLoading('Contact information ကို စိစစ်နေပါသည်...')
@@ -1247,6 +1330,8 @@ function App() {
             }
             
             showNotification(error.message || 'Contact information သိမ်းဆည်းရာတွင် အမှားတစ်ခု ဖြစ်ပွားခဲ့သည်', 'error')
+            // Reset button click state on error so user can try again
+            setContactButtonClicked(false)
           }
         } else {
           showNotification('Please fill in both email and phone number', 'error')
@@ -1704,11 +1789,13 @@ function App() {
 
           <div className="form-footer">
               <button 
-              className="next-button" 
+              className={`next-button ${screenLoading ? 'loading' : ''}`} 
               onClick={handleExistingUserPasscodeVerify}
-              disabled={passcode.length !== 6}
+              disabled={screenLoading || passcode.length !== 6}
               >
-              <span className="button-text">Verify & Continue</span>
+              <span className="button-text">
+                {screenLoading ? 'Verifying...' : 'Verify & Continue'}
+              </span>
               </button>
           </div>
         </div>
@@ -1803,8 +1890,12 @@ function App() {
           </div>
 
           <div className="form-footer">
-            <button className="next-button" onClick={handleNext}>
-              Next
+            <button 
+              className={`next-button ${screenLoading ? 'loading' : ''}`} 
+              onClick={handleNext}
+              disabled={screenLoading}
+            >
+              {screenLoading ? 'Please wait...' : 'Next'}
             </button>
           </div>
         </div>
@@ -1865,8 +1956,12 @@ function App() {
           </div>
 
           <div className="form-footer">
-            <button className="next-button" onClick={handleNext}>
-              Next
+            <button 
+              className={`next-button ${screenLoading ? 'loading' : ''}`} 
+              onClick={handleNext}
+              disabled={screenLoading}
+            >
+              {screenLoading ? 'Please wait...' : 'Next'}
             </button>
           </div>
         </div>
@@ -2037,8 +2132,12 @@ function App() {
           </div>
 
           <div className="form-footer">
-            <button className="next-button" onClick={handleNext}>
-              Next
+            <button 
+              className={`next-button ${screenLoading ? 'loading' : ''}`} 
+              onClick={handleNext}
+              disabled={screenLoading}
+            >
+              {screenLoading ? 'Please wait...' : 'Next'}
             </button>
           </div>
         </div>
@@ -2075,8 +2174,12 @@ function App() {
           </div>
 
           <div className="form-footer">
-            <button className="next-button" onClick={handleNext}>
-              Next
+            <button 
+              className={`next-button ${screenLoading ? 'loading' : ''}`} 
+              onClick={handleNext}
+              disabled={screenLoading}
+            >
+              {screenLoading ? 'Please wait...' : 'Next'}
             </button>
           </div>
         </div>
@@ -2241,8 +2344,12 @@ function App() {
           </div>
 
           <div className="form-footer">
-            <button className="next-button" onClick={handleNext}>
-              Next
+            <button 
+              className={`next-button ${screenLoading ? 'loading' : ''}`} 
+              onClick={handleNext}
+              disabled={screenLoading || contactButtonClicked}
+            >
+              {screenLoading ? 'Please wait...' : contactButtonClicked ? 'Processing...' : 'Next'}
             </button>
           </div>
         </div>
@@ -2319,8 +2426,12 @@ function App() {
           </div>
 
           <div className="form-footer">
-            <button className="next-button" onClick={handleNext}>
-              Next
+            <button 
+              className={`next-button ${screenLoading ? 'loading' : ''}`} 
+              onClick={handleNext}
+              disabled={screenLoading}
+            >
+              {screenLoading ? 'Please wait...' : 'Next'}
             </button>
           </div>
         </div>
@@ -2389,8 +2500,12 @@ function App() {
           </div>
 
           <div className="form-footer">
-            <button className="next-button" onClick={handleNext}>
-              Next
+            <button 
+              className={`next-button ${screenLoading ? 'loading' : ''}`} 
+              onClick={handleNext}
+              disabled={screenLoading}
+            >
+              {screenLoading ? 'Please wait...' : 'Next'}
             </button>
           </div>
         </div>

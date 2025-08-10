@@ -281,9 +281,15 @@ const Login = ({ onSuccess }) => {
 export default Login
 
 const Screen = styled.div`
+  /* Use mobile-safe viewport height to avoid hidden login button */
   min-height: 100vh;
+  min-height: 100svh;
+  min-height: 100dvh;
   background: radial-gradient(1200px 600px at 50% -10%, #dbeafe 0%, transparent 55%), linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
-  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  padding-bottom: calc(32px + env(safe-area-inset-bottom) + var(--bottom-ui-offset, 0px));
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 `
 
 const Header = styled.header`

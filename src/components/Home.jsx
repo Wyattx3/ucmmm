@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import client, { databases, DATABASE_ID, COLLECTIONS, ID, Query } from '../lib/appwrite.js'
+import storageService from '../services/storage.js'
 import './Home.css'
 import styled from 'styled-components'
 import BottomNav from './BottomNav'
@@ -12,6 +13,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
   const [messagesByChat, setMessagesByChat] = useState({})
   const [composerText, setComposerText] = useState('')
   const [composerImage, setComposerImage] = useState(null)
+  const [imageUploading, setImageUploading] = useState(false)
   const todayLabel = useMemo(() => {
     const now = new Date()
     const options = { weekday: 'short', month: 'short', day: 'numeric' }
@@ -32,41 +34,8 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
     } catch {}
   }, [pinnedMemberIds])
 
-  // Load messages from DB on chat open
-  useEffect(() => {
-    (async () => {
-      if (!openChat) return
-      try {
-        const res = await databases.listDocuments(
-          DATABASE_ID,
-          COLLECTIONS.MESSAGES,
-          [Query.equal('chatId', openChat.id), Query.orderAsc('createdAt'), Query.limit(200)]
-        )
-        setMessagesByChat(prev => ({ 
-          ...prev, 
-          [openChat.id]: res.documents.map(d => ({ 
-            id: d.$id, 
-            text: d.text, 
-            imageUrl: null, 
-            from: d.senderId === loggedInUser?.$id ? 'me' : 'other',
-            senderId: d.senderId,
-            senderName: d.senderName,
-            senderAvatar: d.senderAvatar,
-            time: new Date(d.createdAt || d.$createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
-          })) 
-        }))
-        
-        // Auto scroll to latest message after loading
-        setTimeout(() => {
-          if (messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
-          }
-        }, 100)
-      } catch (e) {
-        console.warn('Load messages failed:', e.message)
-      }
-    })()
-  }, [openChat])
+  // Note: Message loading is handled by the main useEffect below (line 233-265)
+  // This duplicate loading has been removed to prevent conflicts
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -124,7 +93,11 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                 return [chatId, null]
               }
               const when = new Date(d.createdAt || d.$createdAt)
-              const lastMsg = { text: d.text, time: when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+              const lastMsg = { 
+                text: d.text, 
+                imageUrl: d.imageUrl,
+                time: when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+              }
               console.log(`📬 Last message for ${m.name} (chatId: ${chatId}):`, lastMsg)
               return [chatId, lastMsg]
             } catch (e) {
@@ -170,6 +143,8 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
   const [keyboardOffset, setKeyboardOffset] = useState(0)
   const [isTyping, setIsTyping] = useState(false)
   const composerRef = useRef(null)
+  // Dynamic padding to keep composer above bottom nav
+  const [navOverlayPad, setNavOverlayPad] = useState(12)
 
   // Dynamic text truncation based on screen size
   const [screenWidth, setScreenWidth] = useState(window.innerWidth)
@@ -184,6 +159,27 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
     if (!text) return text
     const limit = screenWidth <= 360 ? 15 : screenWidth <= 480 ? 20 : 25
     return text.length > limit ? text.substring(0, limit) + '...' : text
+  }
+
+  const getLastMessagePreview = (lastMsg) => {
+    if (!lastMsg) return 'No message yet'
+    
+    // If there's an image, show photo indicator
+    if (lastMsg.imageUrl) {
+      // If there's also text, show both
+      if (lastMsg.text?.trim()) {
+        return `📸 ${truncateText(lastMsg.text)}`
+      }
+      // If only image, show photo indicator
+      return '📸 Photo'
+    }
+    
+    // If only text, show text
+    if (lastMsg.text?.trim()) {
+      return truncateText(lastMsg.text)
+    }
+    
+    return 'No message yet'
   }
   const [seenByChat, setSeenByChat] = useState(() => {
     try {
@@ -240,14 +236,20 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
           [Query.equal('chatId', openChat.id), Query.orderAsc('createdAt')]
         )
         console.log(`📝 Found ${res.documents.length} messages for chat ${openChat.id}`)
-        const messages = res.documents.map(d => ({
-          id: d.$id,
-          text: d.text,
-          from: d.from || (d.senderId === loggedInUser?.$id ? 'me' : 'other'),
-          time: new Date(d.createdAt || d.$createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          senderName: d.senderName,
-          senderAvatar: d.senderAvatar
-        }))
+        const messages = res.documents.map(d => {
+          const isMe = d.senderId === loggedInUser?.$id;
+          console.log(`📋 Message from ${d.senderName}: senderId=${d.senderId}, currentUser=${loggedInUser?.$id}, isMe=${isMe}`);
+          
+          return {
+            id: d.$id,
+            text: d.text,
+            from: isMe ? 'me' : 'other',
+            time: new Date(d.createdAt || d.$createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            senderName: d.senderName,
+            senderAvatar: d.senderAvatar,
+            imageUrl: d.imageUrl
+          };
+        })
         setMessagesByChat(prev => ({ ...prev, [openChat.id]: messages }))
         console.log(`✅ Messages loaded for chat ${openChat.id}:`, messages)
       } catch (e) {
@@ -284,6 +286,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
             ...prev,
             [newMessage.chatId]: {
               text: newMessage.text,
+              imageUrl: newMessage.imageUrl,
               time: new Date(newMessage.createdAt || newMessage.$createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             }
           }))
@@ -300,7 +303,8 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
               from: 'other',
               time: new Date(newMessage.createdAt || newMessage.$createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               senderName: newMessage.senderName,
-              senderAvatar: newMessage.senderAvatar
+              senderAvatar: newMessage.senderAvatar,
+              imageUrl: newMessage.imageUrl
             }
             console.log('➕ Adding received message to current chat:', message)
             setMessagesByChat(prev => ({
@@ -369,6 +373,41 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
     }
   }, [openChat])
 
+  // Measure bottom navigation height and keep composer above it when keyboard is closed
+  useEffect(() => {
+    const measure = () => {
+      try {
+        const el = document.getElementById('navbody')
+        if (!el) { setNavOverlayPad(12); return }
+        const rect = el.getBoundingClientRect()
+        // Add breathing space above the nav
+        const pad = Math.max(12, Math.round(rect.height + 16))
+        setNavOverlayPad(pad)
+      } catch {}
+    }
+
+    // Initial measure
+    measure()
+
+    // Observe size changes of the nav body
+    let ro
+    const el = document.getElementById('navbody')
+    if (typeof ResizeObserver !== 'undefined' && el) {
+      ro = new ResizeObserver(() => measure())
+      ro.observe(el)
+    }
+
+    // Recompute on viewport changes
+    window.addEventListener('resize', measure, { passive: true })
+    window.visualViewport?.addEventListener('resize', measure, { passive: true })
+
+    return () => {
+      window.removeEventListener('resize', measure)
+      window.visualViewport?.removeEventListener('resize', measure)
+      ro?.disconnect()
+    }
+  }, [])
+
   // Ensure last message and composer stay visible without zoom
   useEffect(() => {
     if (!openChat) return
@@ -385,7 +424,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
 
   // Mock helper: simulate random group member replying
   const simulateGroupReply = null
-  const navPad = (isKeyboardOpen || isTyping) ? 0 : 12
+  const navPad = (isKeyboardOpen || isTyping) ? 0 : navOverlayPad
 
   return (
     <Screen>
@@ -496,18 +535,38 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                     </MessagesArea>
 
                     <Composer ref={composerRef} $offset={keyboardOffset} $navPad={navPad}>
-                      <AttachLabel htmlFor="chat-image">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path d="M4 8a2 2 0 0 1 2-2h2l1.2-1.8A2 2 0 0 1 10.9 3h2.2a2 2 0 0 1 1.7 1.2L16 6h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="#0f172a" strokeWidth="1.5"/>
-                          <circle cx="12" cy="12" r="3.5" stroke="#0f172a" strokeWidth="1.5"/>
-                        </svg>
+                      <AttachLabel htmlFor="chat-image" $uploading={imageUploading}>
+                        {imageUploading ? (
+                          <div className="spinner">⏳</div>
+                        ) : (
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M4 8a2 2 0 0 1 2-2h2l1.2-1.8A2 2 0 0 1 10.9 3h2.2a2 2 0 0 1 1.7 1.2L16 6h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="#0f172a" strokeWidth="1.5"/>
+                            <circle cx="12" cy="12" r="3.5" stroke="#0f172a" strokeWidth="1.5"/>
+                          </svg>
+                        )}
                       </AttachLabel>
                       <input id="chat-image" type="file" accept="image/*" style={{ display: 'none' }}
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0]
                           if (!file) return
-                          const url = URL.createObjectURL(file)
-                          setComposerImage(url)
+                          
+                          // Show loading state
+                          setImageUploading(true)
+                          
+                          try {
+                            // Upload to Appwrite Storage
+                            console.log('📤 Uploading chat image...')
+                            const uploadResult = await storageService.uploadChatImage(file, loggedInUser?.$id)
+                            console.log('✅ Chat image uploaded:', uploadResult.url)
+                            
+                            // Set the permanent URL
+                            setComposerImage(uploadResult.url)
+                          } catch (error) {
+                            console.error('❌ Image upload failed:', error)
+                            alert('Failed to upload image. Please try again.')
+                          } finally {
+                            setImageUploading(false)
+                          }
                         }} />
                       <input className="text" placeholder="Message..." value={composerText}
                         onChange={(e) => setComposerText(e.target.value)}
@@ -520,7 +579,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                         </PreviewThumb>
                       )}
                       <SendBtn
-                        disabled={!composerText && !composerImage}
+                        disabled={!composerText && !composerImage || imageUploading}
                         id="send-btn"
                         onClick={() => {
                           if (!openChat) return
@@ -528,7 +587,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                             id: `${Date.now()}`,
                             text: composerText || null,
                             imageUrl: composerImage || null,
-                            from: 'me',
+                            from: 'me', // Frontend display only
                             senderId: loggedInUser?.$id,
                             senderName: loggedInUser?.firstName,
                             senderAvatar: loggedInUser?.publicPhoto,
@@ -546,12 +605,13 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                               ID.unique(),
                               {
                                 chatId: openChat.id,
-                                from: 'me',
                                 text: entry.text,
                                 createdAt: new Date().toISOString(),
                                 senderId: loggedInUser?.$id,
                                 senderName: loggedInUser?.firstName,
-                                senderAvatar: loggedInUser?.publicPhoto
+                                senderAvatar: loggedInUser?.publicPhoto,
+                                imageUrl: entry.imageUrl
+                                // Frontend determines 'from' based on senderId vs current user
                               }
                             ).catch(()=>{})
                           } catch (e) { console.warn('DB create message failed:', e.message) }
@@ -626,18 +686,38 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                   </MessagesArea>
 
                    <Composer ref={composerRef} $offset={keyboardOffset} $navPad={navPad}>
-                    <AttachLabel htmlFor="chat-image">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M4 8a2 2 0 0 1 2-2h2l1.2-1.8A2 2 0 0 1 10.9 3h2.2a2 2 0 0 1 1.7 1.2L16 6h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="#0f172a" strokeWidth="1.5"/>
-                        <circle cx="12" cy="12" r="3.5" stroke="#0f172a" strokeWidth="1.5"/>
-                      </svg>
+                    <AttachLabel htmlFor="chat-image" $uploading={imageUploading}>
+                      {imageUploading ? (
+                        <div className="spinner">⏳</div>
+                      ) : (
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                          <path d="M4 8a2 2 0 0 1 2-2h2l1.2-1.8A2 2 0 0 1 10.9 3h2.2a2 2 0 0 1 1.7 1.2L16 6h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="#0f172a" strokeWidth="1.5"/>
+                          <circle cx="12" cy="12" r="3.5" stroke="#0f172a" strokeWidth="1.5"/>
+                        </svg>
+                      )}
                     </AttachLabel>
                     <input id="chat-image" type="file" accept="image/*" style={{ display: 'none' }}
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0]
                         if (!file) return
-                        const url = URL.createObjectURL(file)
-                        setComposerImage(url)
+                        
+                        // Show loading state
+                        setImageUploading(true)
+                        
+                        try {
+                          // Upload to Appwrite Storage
+                          console.log('📤 Uploading chat image...')
+                          const uploadResult = await storageService.uploadChatImage(file, loggedInUser?.$id)
+                          console.log('✅ Chat image uploaded:', uploadResult.url)
+                          
+                          // Set the permanent URL
+                          setComposerImage(uploadResult.url)
+                        } catch (error) {
+                          console.error('❌ Image upload failed:', error)
+                          alert('Failed to upload image. Please try again.')
+                        } finally {
+                          setImageUploading(false)
+                        }
                       }} />
                     <input className="text" placeholder="Message..." value={composerText}
                       onChange={(e) => setComposerText(e.target.value)}
@@ -650,7 +730,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                       </PreviewThumb>
                     )}
                     <SendBtn
-                      disabled={!composerText && !composerImage}
+                      disabled={!composerText && !composerImage || imageUploading}
                       id="send-btn"
                       onClick={() => {
                         if (!openChat) return
@@ -662,7 +742,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                           id: `temp_${Date.now()}`,
                           text: messageText || null,
                           imageUrl: composerImage || null,
-                          from: 'me',
+                          from: 'me', // Frontend display only
                           senderId: loggedInUser?.$id,
                           senderName: loggedInUser?.firstName,
                           senderAvatar: loggedInUser?.publicPhoto,
@@ -684,6 +764,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                           ...prev,
                           [openChat.id]: {
                             text: entry.text,
+                            imageUrl: entry.imageUrl,
                             time: entry.time
                           }
                         }))
@@ -705,12 +786,13 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                               ID.unique(),
                               {
                                 chatId: openChat.id,
-                                from: 'me',
                                 text: entry.text,
                                 createdAt: new Date().toISOString(),
                                 senderId: loggedInUser?.$id,
                                 senderName: loggedInUser?.firstName,
-                                senderAvatar: loggedInUser?.publicPhoto
+                                senderAvatar: loggedInUser?.publicPhoto,
+                                imageUrl: entry.imageUrl
+                                // Frontend determines 'from' based on senderId vs current user
                               }
                             )
                             console.log('✅ Message sent to database successfully:', newDoc.$id)
@@ -772,7 +854,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                   </div>
                   <div className="center">
                     <div className="name">{m.name}</div>
-                    <div className="sub">{truncateText(lastMsgByChat[chatId]?.text) || 'No message yet'} • {lastMsgByChat[chatId]?.time || '—'}</div>
+                    <div className="sub">{getLastMessagePreview(lastMsgByChat[chatId])} • {lastMsgByChat[chatId]?.time || '—'}</div>
                   </div>
                   <RightMeta>
                     <span className="time">{lastMsgByChat[chatId]?.time || ''}</span>
@@ -873,7 +955,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
       )}
 
       {/* Bottom Navigation (controlled) */}
-      <FooterDock $hidden={isKeyboardOpen || isTyping} aria-hidden={isKeyboardOpen || isTyping}>
+      <FooterDock $hidden={isKeyboardOpen || isTyping || showProfile || showSearch} aria-hidden={isKeyboardOpen || isTyping || showProfile || showSearch}>
         <BottomNav value={activeTab} onChange={setActiveTab} />
       </FooterDock>
       </div>
@@ -1085,13 +1167,15 @@ const BgGrad = styled.div`
 
 const FooterDock = styled.div`
   position: fixed;
-  bottom: calc(12px + env(safe-area-inset-bottom));
+  bottom: calc(8px + env(safe-area-inset-bottom) + var(--bottom-ui-offset, 0px));
   left: 50%;
   transform: translateX(-50%);
   width: 100%;
-  z-index: 100;
+  max-width: 480px;
+  z-index: 200;
   display: ${props => (props.$hidden ? 'none' : 'flex')};
   justify-content: center;
+  padding: 0 16px;
 `
 
 const SearchButton = styled.button`
@@ -1346,8 +1430,19 @@ const Composer = styled.div`
 `
 
 const AttachLabel = styled.label`
-  cursor: pointer;
+  cursor: ${props => props.$uploading ? 'not-allowed' : 'pointer'};
   font-size: 18px;
+  opacity: ${props => props.$uploading ? 0.6 : 1};
+  transition: opacity 0.2s;
+  
+  .spinner {
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
 `
 
 const SendBtn = styled.button`
@@ -1452,8 +1547,8 @@ const ChatTile = styled.div`
   .center { 
     flex: 1; 
     min-width: 0; 
-    margin-right: 100px;
-    max-width: calc(100% - 150px);
+    margin-right: 120px; /* Increased space for star + time */
+    max-width: calc(100% - 160px);
   }
   .name { 
     color: #0f172a; 
@@ -1479,8 +1574,8 @@ const ChatTile = styled.div`
     .name { font-size: 14px; }
     .sub { font-size: 11px; }
     .center { 
-      margin-right: 75px;
-      max-width: calc(100% - 105px);
+      margin-right: 90px; /* Adjusted for mobile */
+      max-width: calc(100% - 120px);
     }
   }
 
@@ -1491,8 +1586,8 @@ const ChatTile = styled.div`
     .name { font-size: 13px; }
     .sub { font-size: 10px; }
     .center { 
-      margin-right: 70px;
-      max-width: calc(100% - 95px);
+      margin-right: 80px; /* Adjusted for small mobile */
+      max-width: calc(100% - 105px);
     }
   }
 
@@ -1500,8 +1595,8 @@ const ChatTile = styled.div`
     padding: 12px 14px;
     .name { font-size: 16px; }
     .center { 
-      margin-right: 110px;
-      max-width: calc(100% - 160px);
+      margin-right: 130px; /* Adjusted for desktop */
+      max-width: calc(100% - 180px);
     }
   }
 `
@@ -1519,14 +1614,21 @@ const PinButton = styled.button`
 
 const RightMeta = styled.div`
   position: absolute;
-  right: 12px;
+  right: 72px; /* Increased to avoid star overlap */
   top: 50%;
   transform: translateY(-50%);
   display: grid;
   justify-items: end;
   gap: 4px;
+  max-width: 100px; /* Prevent text overflow */
   
-  .time { font-size: 11px; color: #94a3b8; }
+  .time { 
+    font-size: 11px; 
+    color: #94a3b8; 
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .badge { 
     display: inline-block; 
     min-width: 18px; 
@@ -1541,11 +1643,14 @@ const RightMeta = styled.div`
   }
 
   @media (max-width: 360px) {
-    right: 10px;
+    right: 60px; /* Adjusted for smaller screens */
+    max-width: 80px;
+    .time { font-size: 10px; }
   }
 
   @media (min-width: 480px) {
-    right: 14px;
+    right: 75px; /* Adjusted for larger screens */
+    max-width: 120px;
     .time { font-size: 12px; }
     .badge { min-width: 20px; height: 20px; font-size: 12px; }
   }
@@ -1553,7 +1658,7 @@ const RightMeta = styled.div`
 
 const PinIcon = styled.button`
   position: absolute;
-  right: 50px;
+  right: 12px; /* Move closer to right edge */
   top: 50%;
   transform: translateY(-50%);
   border: none;
@@ -1565,17 +1670,26 @@ const PinIcon = styled.button`
   line-height: 1;
   border-radius: 6px;
   z-index: 10;
+  min-width: 32px; /* Ensure consistent touch target */
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   
   &:active { transform: translateY(-50%) scale(0.98); }
 
   @media (max-width: 360px) {
-    right: 45px;
+    right: 8px;
     font-size: 14px;
+    min-width: 28px;
+    height: 28px;
   }
 
   @media (min-width: 480px) {
-    right: 55px;
+    right: 16px;
     font-size: 18px;
+    min-width: 36px;
+    height: 36px;
   }
 `
 
@@ -1644,7 +1758,8 @@ const Overlay = styled.div`
   background: rgba(2, 6, 23, 0.5);
   display: grid;
   place-items: end center;
-  z-index: 200;
+  /* Lift above footer dock */
+  z-index: 500;
 `
 
 const Drawer = styled.div`
@@ -1653,17 +1768,18 @@ const Drawer = styled.div`
   background: #ffffff;
   border-top-left-radius: 16px;
   border-top-right-radius: 16px;
-  padding: 12px 12px 16px 12px;
+  /* Keep contents above iOS Safari bottom bar */
+  padding: 12px 12px calc(16px + env(safe-area-inset-bottom)) 12px;
   box-shadow: 0 -10px 24px rgba(2, 6, 23, 0.2);
 
   @media (min-width: 480px) { 
     max-width: 480px;
-    padding: 16px 16px 20px 16px;
+    padding: 16px 16px calc(20px + env(safe-area-inset-bottom)) 16px;
   }
   @media (min-width: 640px) { max-width: 560px; }
   @media (min-width: 768px) { 
     max-width: 720px;
-    padding: 20px 20px 24px 20px;
+    padding: 20px 20px calc(24px + env(safe-area-inset-bottom)) 20px;
   }
   @media (min-width: 1024px) { max-width: 840px; }
   @media (min-width: 1280px) { max-width: 960px; }

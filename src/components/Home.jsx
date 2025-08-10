@@ -51,11 +51,14 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
   useEffect(() => {
     (async () => {
       try {
-        // Prefer users collection
+        // Prefer users collection - only show users who have completed Member Card
         const res = await databases.listDocuments(
           DATABASE_ID,
           COLLECTIONS.USERS,
-          [Query.limit(50)]
+          [
+            Query.equal('hasMemberCard', true),
+            Query.limit(50)
+          ]
         )
         const mapped = res.documents
           .filter(d => d.$id !== loggedInUser?.$id) // Exclude logged in user

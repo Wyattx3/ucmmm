@@ -309,23 +309,51 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
   const lastProcessedTime = useRef(0)
   // Subscription management to prevent multiple subscriptions
   const activeSubscriptionRef = useRef(null)
-  // Stable realtime subscription with connection management
+  // Connection status tracking
+  const [connectionStatus, setConnectionStatus] = useState('connecting')
+  
+  // Manual retry function for failed connections
+  const retryConnection = () => {
+    if (activeSubscriptionRef.current) {
+      try {
+        activeSubscriptionRef.current()
+      } catch (error) {
+        // Ignore cleanup errors
+      }
+      activeSubscriptionRef.current = null
+    }
+    setConnectionStatus('connecting')
+    // Trigger a new subscription attempt by toggling a dependency
+    setForceReconnect(prev => prev + 1)
+  }
+  
+  // Force reconnect state to trigger useEffect
+  const [forceReconnect, setForceReconnect] = useState(0)
+  
+  // Stable realtime subscription with improved error handling
   useEffect(() => {
     if (!loggedInUser) return
     let subscriptionActive = true
     let retryCount = 0
-    const maxRetries = 3
+    const maxRetries = 5
+    let reconnectTimeoutId = null
+    
     const createSubscription = () => {
       if (!subscriptionActive) return null
       // Prevent multiple active subscriptions
       if (activeSubscriptionRef.current) {
         return activeSubscriptionRef.current
       }
-      console.log(`🔔 Setting up realtime subscription for user ${loggedInUser.firstName} (attempt ${retryCount + 1})`)
+      
+      setConnectionStatus('connecting')
+      
       try {
         const unsubscribe = client.subscribe(
           [`databases.${DATABASE_ID}.collections.${COLLECTIONS.MESSAGES}.documents`],
           (response) => {
+            // Connection successful
+            setConnectionStatus('connected')
+            retryCount = 0 // Reset retry count on successful connection
           // Only log important events, not all events
           if (response.events.some(event => event.includes('.create'))) {
           }
@@ -398,14 +426,26 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
           }
         }
         )
-        // Store active subscription reference
+        
+        // Store active subscription reference  
         activeSubscriptionRef.current = unsubscribe
         return unsubscribe
+        
       } catch (error) {
+        setConnectionStatus('error')
+        
         if (retryCount < maxRetries && subscriptionActive) {
           retryCount++
-          console.log(`🔄 Retrying subscription in 2 seconds... (${retryCount}/${maxRetries})`)
-          setTimeout(() => createSubscription(), 2000)
+          const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 30000) // Exponential backoff, max 30s
+          setConnectionStatus('reconnecting')
+          
+          reconnectTimeoutId = setTimeout(() => {
+            if (subscriptionActive) {
+              createSubscription()
+            }
+          }, retryDelay)
+        } else {
+          setConnectionStatus('failed')
         }
         return null
       }
@@ -417,13 +457,21 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
     return () => {
       subscriptionActive = false
       clearTimeout(subscriptionDelay)
+      if (reconnectTimeoutId) {
+        clearTimeout(reconnectTimeoutId)
+      }
       // Clean up active subscription
       if (activeSubscriptionRef.current) {
-        activeSubscriptionRef.current()
+        try {
+          activeSubscriptionRef.current()
+        } catch (error) {
+          // Ignore cleanup errors
+        }
         activeSubscriptionRef.current = null
       }
+      setConnectionStatus('disconnected')
     }
-  }, [loggedInUser]) // Only depend on loggedInUser, not openChat
+  }, [loggedInUser, forceReconnect]) // Depend on forceReconnect for manual retry
   // Initialize presence tracking for current user
   useEffect(() => {
     if (loggedInUser?.$id) {
@@ -885,6 +933,45 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                       </div>
                     </div>
                     <HeaderActions>
+                      {/* Connection Status Indicator */}
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: 10,
+                        color: connectionStatus === 'connected' ? '#22c55e' : 
+                               connectionStatus === 'connecting' || connectionStatus === 'reconnecting' ? '#f59e0b' : '#ef4444',
+                        fontWeight: 500
+                      }}>
+                        <div style={{
+                          width: 6,
+                          height: 6,
+                          borderRadius: '50%',
+                          background: connectionStatus === 'connected' ? '#22c55e' : 
+                                     connectionStatus === 'connecting' || connectionStatus === 'reconnecting' ? '#f59e0b' : '#ef4444'
+                        }}></div>
+                        {connectionStatus === 'connected' && '●'}
+                        {connectionStatus === 'connecting' && 'Connecting'}
+                        {connectionStatus === 'reconnecting' && 'Reconnecting'}
+                        {(connectionStatus === 'error' || connectionStatus === 'failed') && (
+                          <button 
+                            onClick={retryConnection}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#ef4444',
+                              fontSize: 10,
+                              cursor: 'pointer',
+                              padding: '2px 4px',
+                              borderRadius: 3,
+                              textDecoration: 'underline'
+                            }}
+                          >
+                            Retry
+                          </button>
+                        )}
+                      </div>
+                      
                       <ThemeSelect value={chatTheme} onChange={(e)=>setChatTheme(e.target.value)} aria-label="Theme">
                         <option value="classic">Classic</option>
                         <option value="ocean">Ocean</option>

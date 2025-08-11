@@ -1441,9 +1441,48 @@ const ChatSection = styled.div`
   display: flex;
   flex-direction: column;
   gap: 12px;
-  @media (min-width: 480px) { gap: 14px; }
-  @media (min-width: 768px) { gap: 16px; }
-  @media (min-width: 1024px) { gap: 18px; }
+  height: calc(100vh - 160px);
+  overflow-y: auto;
+  padding-bottom: 90px;
+  
+  /* Custom scrollbar styling */
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 6px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 6px;
+  }
+  
+  &::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+  
+  @media (min-width: 480px) { 
+    gap: 14px;
+    height: calc(100vh - 170px);
+    padding-bottom: 130px;
+  }
+  @media (min-width: 768px) { 
+    gap: 16px;
+    height: calc(100vh - 180px);
+    padding-bottom: 140px;
+  }
+  @media (min-width: 1024px) { 
+    gap: 18px;
+    height: calc(100vh - 190px);
+    padding-bottom: 150px;
+  }
+  @media (max-width: 360px) {
+    height: calc(100vh - 140px);
+    padding-bottom: 110px;
+  }
 `
 const GroupTile = styled.div``
 const GroupHero = styled.div`
@@ -1470,6 +1509,29 @@ const ChatsGrid = styled.div`
   display: grid;
   grid-template-columns: 1fr;
   gap: 10px;
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+  
+  /* Custom scrollbar styling */
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 6px;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 6px;
+  }
+  
+  &::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+  
   @media (max-width: 480px) {
     gap: 8px;
   }

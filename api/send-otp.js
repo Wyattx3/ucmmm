@@ -1,55 +1,43 @@
-export default async ({ req, res, log, error }) => {
-  try {
-    log('🚀 UC ERA - Send OTP Email function triggered (FIXED VERSION)');
-    
-    // Simplified environment handling - no complex detection
-    const resendApiKey = process.env.RESEND_API_KEY || '';
-    
-    log('Resend API key present:', !!resendApiKey);
-    log('Request body type:', typeof req.body);
-    log('Request body:', req.body);
+// UC ERA - Send OTP Email Function (Vercel Serverless)
+module.exports = async function handler(req, res) {
+  // Enable CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+  
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-    // Parse request data - simplified
-    let requestData;
-    try {
-      if (typeof req.body === 'string') {
-        requestData = JSON.parse(req.body);
-      } else if (req.body && typeof req.body === 'object') {
-        requestData = req.body;
-      } else {
-        throw new Error('Invalid request body format');
-      }
-    } catch (parseError) {
-      error('Failed to parse request data:', parseError.message);
-      return res.json({
-        success: false,
-        error: 'Invalid request body format'
-      }, 400);
-    }
+  try {
+    console.log('🚀 UC ERA - Send OTP Email function triggered (Vercel)');
     
-    log('Parsed request data:', requestData);
-    const { userId, email, userName, otpCode } = requestData;
+    const resendApiKey = process.env.RESEND_API_KEY || '';
+    const { userId, email, userName, otpCode } = req.body;
 
     if (!email || !otpCode) {
-      error('Missing required fields: email or otpCode');
-      return res.json({
+      return res.status(400).json({
         success: false,
         error: 'Missing required fields: email or otpCode'
-      }, 400);
+      });
     }
 
-    log(`📧 Sending OTP to: ${email}`);
+    console.log(`📧 Sending OTP to: ${email}`);
 
     // Check if RESEND_API_KEY is available
     if (!resendApiKey) {
-      log('⚠️ RESEND_API_KEY is not configured - function will work in demo mode');
+      console.log('⚠️ RESEND_API_KEY is not configured - function will work in demo mode');
       
-      // Demo mode - return success but don't actually send email
-      return res.json({
+      return res.status(200).json({
         success: true,
         message: 'OTP email sent successfully (demo mode)',
         demo: true,
-        otpCode: otpCode, // Include for testing
+        otpCode: otpCode,
         note: 'Add RESEND_API_KEY environment variable for production email sending'
       });
     }
@@ -108,35 +96,35 @@ export default async ({ req, res, log, error }) => {
       })
     });
 
-    log(`📬 Resend API Response Status: ${resendResponse.status}`);
+    console.log(`📬 Resend API Response Status: ${resendResponse.status}`);
 
     if (!resendResponse.ok) {
       const errorText = await resendResponse.text();
-      error(`Resend API error: ${resendResponse.status} - ${errorText}`);
-      return res.json({ 
+      console.error(`Resend API error: ${resendResponse.status} - ${errorText}`);
+      return res.status(500).json({ 
         success: false, 
         error: 'Failed to send email',
         details: errorText
-      }, 500);
+      });
     }
 
     const resendData = await resendResponse.json();
-    log(`✅ Email sent successfully. Message ID: ${resendData.id}`);
+    console.log(`✅ Email sent successfully. Message ID: ${resendData.id}`);
 
-    return res.json({
+    return res.status(200).json({
       success: true,
       message: 'OTP email sent successfully',
       messageId: resendData.id
     });
 
   } catch (err) {
-    error(`❌ Function error: ${err.message}`);
-    error(`Error stack: ${err.stack}`);
+    console.error(`❌ Function error: ${err.message}`);
+    console.error(`Error stack: ${err.stack}`);
 
-    return res.json({
+    return res.status(500).json({
       success: false,
       error: 'Internal server error',
       details: err.message
-    }, 500);
+    });
   }
-};
+}

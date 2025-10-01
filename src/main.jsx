@@ -1,13 +1,20 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import './utils/devMode.js'
 import App from './App.jsx'
 import { setupViewportOffsets } from './lib/viewport.js'
 
-// Randomize path to avoid stale caches on direct loads (simple heuristic)
+// UC ERA - Clean URL Routing System
 try {
-  const randomPath = '/' + Math.random().toString(36).slice(2)
-  window.history.replaceState(null, '', randomPath)
+  // Clean up random paths and set proper initial route
+  const currentPath = window.location.pathname
+  
+  // If random path or root, redirect to welcome
+  if (currentPath === '/' || currentPath.match(/^\/[a-z0-9]+$/) || currentPath.match(/^\/[a-z0-9]{10,}$/)) {
+    window.history.replaceState(null, '', '/welcome')
+    document.title = 'UC ERA - Myanmar Cultural Community'
+  }
 } catch {}
 
 // Initialize viewport offsets for mobile browsers so bottom buttons remain visible

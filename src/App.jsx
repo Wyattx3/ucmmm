@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import { databases, DATABASE_ID, COLLECTIONS, Query } from './lib/appwrite.js'
 import './App.css'
 import { useRegistration } from './hooks/useRegistration'
 import CubeLoader from './components/CubeLoader'
@@ -7,37 +6,24 @@ import MemberCard from './components/MemberCard'
 import EyeLoader from './components/EyeLoader'
 import Home from './components/Home'
 import authService from './services/auth.js'
-import storageService from './services/storage.js'
+import { databases, DATABASE_ID, COLLECTIONS, Query } from './lib/appwrite.js'
 import Login from './components/Login.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 function App() {
-  const [loggedInUser, setLoggedInUser] = useState(() => authService.loadSessionUser())
-  const [currentScreen, setCurrentScreen] = useState(() => {
-    // If user is already logged in, go directly to home
-    const savedUser = authService.loadSessionUser()
-    return savedUser ? 'home' : 'welcome'
-  })
-  // Validate session on first mount as well (with cache-buster)
+  // COMPLETELY CLEAN START - No session validation, no database calls on init
+  const [loggedInUser, setLoggedInUser] = useState(null)
+  const [currentScreen, setCurrentScreen] = useState('welcome')
+  
+  // Restore session on mount
   useEffect(() => {
-    (async () => {
-      const sessionUser = authService.loadSessionUser()
-      if (!sessionUser?.$id) return
-      try {
-        // Cache-bust by adding an always-false filter to avoid cached responses
-        const res = await databases.listDocuments(
-          DATABASE_ID,
-          COLLECTIONS.USERS,
-          [Query.equal('$id', sessionUser.$id), Query.limit(1), Query.offset(0)]
-        )
-        if (!res.documents?.length) {
-          await authService.hardLogout()
-          setLoggedInUser(null)
-          setCurrentScreen('welcome')
-          setNotification({ show: true, type: 'info', message: 'Your session expired. Please log in again.' })
-        }
-      } catch (e) {
-      }
-    })()
+    const savedUser = authService.loadSessionUser()
+    if (savedUser) {
+      console.log('✅ Session restored:', savedUser.full_name || savedUser.first_name)
+      setLoggedInUser(savedUser)
+      setCurrentScreen('home')
+    } else {
+      console.log('ℹ️ No saved session found')
+    }
   }, [])
   // Force network for auth-sensitive requests (disable HTTP cache)
   useEffect(() => {
@@ -102,7 +88,7 @@ function App() {
   })
   const [screenLoading, setScreenLoading] = useState(false)
   const [loadingMessage, setLoadingMessage] = useState('')
-  // Auto-logout if session user no longer exists in DB
+  // Auto-logout if session user no longer exists in DB + Refresh user data
   useEffect(() => {
     let cancelled = false
     const validateSessionUser = async () => {
@@ -119,6 +105,12 @@ function App() {
           setLoggedInUser(null)
           setCurrentScreen('welcome')
           setNotification({ show: true, type: 'info', message: 'Your session expired. Please log in again.' })
+        } else if (!cancelled && res.documents?.length > 0) {
+          // ✅ Refresh user data with latest from database (including date_of_birth!)
+          const freshUserData = res.documents[0]
+          authService.saveSessionUser(freshUserData)
+          setLoggedInUser(freshUserData)
+          console.log('🔄 User data refreshed from database')
         }
       } catch (e) {
       }
@@ -641,7 +633,7 @@ function App() {
     }
   }, [resendCooldown])
   const handleJoinUCEra = () => {
-    // Directly go to registration screen - no need for artificial loading
+    // Directly go to registration screen with clean URL
     setCurrentScreen('registration')
   }
   const handleLogIn = () => {
@@ -1258,6 +1250,224 @@ function App() {
       }, 600)
     }
   }
+  // Calculate zodiac sign from date of birth
+  const calculateZodiacFromDOB = (dateOfBirth) => {
+    if (!dateOfBirth) return 'Aries';
+    
+    const date = new Date(dateOfBirth);
+    const month = date.getMonth() + 1; // 1-12
+    const day = date.getDate();
+    
+    if ((month == 3 && day >= 21) || (month == 4 && day <= 19)) return 'Aries';
+    if ((month == 4 && day >= 20) || (month == 5 && day <= 20)) return 'Taurus';
+    if ((month == 5 && day >= 21) || (month == 6 && day <= 20)) return 'Gemini';
+    if ((month == 6 && day >= 21) || (month == 7 && day <= 22)) return 'Cancer';
+    if ((month == 7 && day >= 23) || (month == 8 && day <= 22)) return 'Leo';
+    if ((month == 8 && day >= 23) || (month == 9 && day <= 22)) return 'Virgo';
+    if ((month == 9 && day >= 23) || (month == 10 && day <= 22)) return 'Libra';
+    if ((month == 10 && day >= 23) || (month == 11 && day <= 21)) return 'Scorpio';
+    if ((month == 11 && day >= 22) || (month == 12 && day <= 21)) return 'Sagittarius';
+    if ((month == 12 && day >= 22) || (month == 1 && day <= 19)) return 'Capricorn';
+    if ((month == 1 && day >= 20) || (month == 2 && day <= 18)) return 'Aquarius';
+    if ((month == 2 && day >= 19) || (month == 3 && day <= 20)) return 'Pisces';
+    
+    return 'Aries'; // Default
+  };
+  
+  // Render member card on canvas with zodiac template
+  const renderMemberCardOnCanvas = async (cardData) => {
+    return new Promise((resolve, reject) => {
+      try {
+        console.log('🎨 Starting canvas rendering with template:', cardData.templateFile);
+        
+        // Create canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = cardData.canvasSize.width;
+        canvas.height = cardData.canvasSize.height;
+        const ctx = canvas.getContext('2d');
+        
+        // Enable high-quality rendering for HD member cards
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        // Load zodiac template image
+        const templateImg = new Image();
+        templateImg.crossOrigin = 'anonymous';
+        
+        templateImg.onload = () => {
+          console.log('✅ Zodiac template loaded:', cardData.zodiacSign);
+          
+          // Draw template background
+          ctx.drawImage(templateImg, 0, 0, canvas.width, canvas.height);
+          
+          // Draw user photo if available
+          if (cardData.photoUrl) {
+            const userPhotoImg = new Image();
+            
+            userPhotoImg.onload = () => {
+              console.log('✅ User photo loaded');
+              
+              const photoPos = cardData.positions.photo;
+              
+              // Save context for rounded corners
+              ctx.save();
+              
+              // Create rounded rectangle path for photo
+              const drawRoundedRect = (x, y, width, height, radius) => {
+                ctx.beginPath();
+                ctx.moveTo(x + radius, y);
+                ctx.lineTo(x + width - radius, y);
+                ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+                ctx.lineTo(x + width, y + height - radius);
+                ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+                ctx.lineTo(x + radius, y + height);
+                ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+                ctx.lineTo(x, y + radius);
+                ctx.quadraticCurveTo(x, y, x + radius, y);
+                ctx.closePath();
+              };
+              
+              drawRoundedRect(photoPos.x, photoPos.y, photoPos.width, photoPos.height, photoPos.borderRadius);
+              ctx.clip();
+              
+              // Draw user photo
+              ctx.drawImage(userPhotoImg, photoPos.x, photoPos.y, photoPos.width, photoPos.height);
+              
+              // Restore context
+              ctx.restore();
+              
+              // Draw text elements
+              drawTextOnCard(ctx, cardData);
+              
+              // Embed steganography data for login verification
+              console.log('🔐 Embedding steganography data...');
+              const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              const steganographyData = {
+                email: cardData.userEmail,
+                memberId: cardData.memberId,
+                userId: cardData.userId,
+                timestamp: new Date().toISOString(),
+                version: "1.0"
+              };
+              const hiddenData = JSON.stringify(steganographyData);
+              embedDataInImage(imageData, hiddenData);
+              ctx.putImageData(imageData, 0, 0);
+              console.log('✅ Steganography data embedded successfully!');
+              
+              // Convert to base64 with maximum quality for HD member card
+              const imageUrl = canvas.toDataURL('image/png', 1.0);
+              setGeneratedMemberCard({
+                imageUrl: imageUrl,
+                userId: cardData.userId,
+                userName: cardData.userName,
+                zodiacSign: cardData.zodiacSign,
+                memberId: cardData.memberId,
+                generatedAt: new Date().toISOString()
+              });
+              
+              console.log('✅ Member card with zodiac template + steganography rendered!');
+              resolve();
+            };
+            
+            userPhotoImg.onerror = () => {
+              console.warn('⚠️ User photo load failed, continuing without photo');
+              drawTextOnCard(ctx, cardData);
+              
+              // Embed steganography even without photo
+              console.log('🔐 Embedding steganography data (no photo)...');
+              const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              const steganographyData = {
+                email: cardData.userEmail,
+                memberId: cardData.memberId,
+                userId: cardData.userId,
+                timestamp: new Date().toISOString(),
+                version: "1.0"
+              };
+              const hiddenData = JSON.stringify(steganographyData);
+              embedDataInImage(imageData, hiddenData);
+              ctx.putImageData(imageData, 0, 0);
+              console.log('✅ Steganography embedded (no photo)!');
+              
+              const imageUrl = canvas.toDataURL('image/png', 1.0);
+              setGeneratedMemberCard({
+                imageUrl: imageUrl,
+                userId: cardData.userId,
+                userName: cardData.userName,
+                zodiacSign: cardData.zodiacSign
+              });
+              resolve();
+            };
+            
+            // Set photo source (base64 string)
+            userPhotoImg.src = cardData.photoUrl;
+            
+          } else {
+            // No photo - just template and text
+            drawTextOnCard(ctx, cardData);
+            
+            // Embed steganography data
+            console.log('🔐 Embedding steganography data (no photo URL)...');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const steganographyData = {
+              email: cardData.userEmail,
+              memberId: cardData.memberId,
+              userId: cardData.userId,
+              timestamp: new Date().toISOString(),
+              version: "1.0"
+            };
+            const hiddenData = JSON.stringify(steganographyData);
+            embedDataInImage(imageData, hiddenData);
+            ctx.putImageData(imageData, 0, 0);
+            console.log('✅ Steganography embedded!');
+            
+            const imageUrl = canvas.toDataURL('image/png', 1.0);
+            setGeneratedMemberCard({
+              imageUrl: imageUrl,
+              userId: cardData.userId,
+              userName: cardData.userName,
+              zodiacSign: cardData.zodiacSign
+            });
+            resolve();
+          }
+        };
+        
+        templateImg.onerror = () => {
+          console.error('❌ Template load failed for:', cardData.zodiacSign);
+          reject(new Error('Template load failed'));
+        };
+        
+        // Load template from public folder
+        templateImg.src = `/templates/${cardData.templateFile}`;
+        
+      } catch (error) {
+        console.error('❌ Canvas rendering error:', error);
+        reject(error);
+      }
+    });
+  };
+  
+  // Helper to draw text elements on member card
+  const drawTextOnCard = (ctx, cardData) => {
+    // Draw name (center aligned as per original design)
+    const namePos = cardData.positions.name;
+    ctx.font = `${namePos.fontWeight} ${namePos.fontSize}px ${namePos.fontFamily}`;
+    ctx.fillStyle = namePos.color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const nameCenterX = namePos.x + (namePos.width / 2);
+    ctx.fillText(cardData.userName, nameCenterX, namePos.y);
+    
+    // Draw member ID (left aligned as per original design)
+    const idPos = cardData.positions.memberId;
+    ctx.font = `${idPos.fontWeight} ${idPos.fontSize}px ${idPos.fontFamily}`;
+    ctx.fillStyle = idPos.color;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(cardData.memberId, idPos.x, idPos.y);
+    
+    console.log('✅ Text elements drawn on card (original positions)');
+  };
+  
   // Handle member card completion
   const handleCompleteMemberCard = async () => {
     try {
@@ -1292,107 +1502,50 @@ function App() {
       }
       const result = await completeMemberCard(userId, memberCardData)
       hideScreenLoading(true) // Immediate hide for smooth transition
-      // Start member card generation
+      
+      // Generate professional member card with zodiac template
       setMemberCardGenerating(true)
       setCurrentScreen('memberCardSuccess')
-      // Generate member card using cloud function
+      
       try {
-        const requestBody = JSON.stringify({ userId })
-        // Use Appwrite SDK for function execution instead of direct HTTP
-        const { Client, Functions } = await import('appwrite')
-        const client = new Client()
-          .setEndpoint(import.meta.env.VITE_APPWRITE_ENDPOINT)
-          .setProject(import.meta.env.VITE_APPWRITE_PROJECT_ID)
-        const functions = new Functions(client)
-        const response = await functions.createExecution(
-          'generate-member-card',
-          JSON.stringify({ userId }),
-          false // sync execution
-        )
-        // Check execution status first
-        if (response.status !== 'completed') {
-          throw new Error(`Function execution failed: ${response.status}`)
-        }
-        const cardResult = response
-        if (cardResult.responseBody) {
-          let parsedResult
-          try {
-            // Parse the response body if it's a string
-            parsedResult = typeof cardResult.responseBody === 'string' 
-              ? JSON.parse(cardResult.responseBody) 
-              : cardResult.responseBody
-          } catch (parseError) {
-            throw new Error('Invalid response format from cloud function')
-          }
-          if (parsedResult.success) {
-            // Check if response contains steganography-embedded member card
-            if (parsedResult.memberCardImage) {
-              const memberCardData = {
-                imageUrl: parsedResult.memberCardImage,
-                message: parsedResult.message || 'Member card with embedded security data'
-              }
-              setGeneratedMemberCard(memberCardData)
-              // Backup to storage (non-blocking)
-              backupMemberCardToStorage(userId, parsedResult.memberCardImage)
-              showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! 🔐 ✨', 'success')
-            }
-            // Check if response contains PNG template data with or without steganography
-            else if (parsedResult.data && parsedResult.data.templateFile) {
-              // Check if steganography data is included
-              if (parsedResult.data.steganographyData) {
-              } else {
-              }
-              // Override photoUrl with user's publicPhoto (base64) from current form data
-              const templateDataWithPublicPhoto = {
-                ...parsedResult.data,
-                photoUrl: formData.publicPhoto || parsedResult.data.photoUrl
-              }
-              // Create member card using Canvas with actual PNG template (steganography will be embedded if data is provided)
-              const imageUrl = await createMemberCardWithPngTemplate(templateDataWithPublicPhoto)
-              const memberCardData = {
-                ...parsedResult.data,
-                imageUrl: imageUrl
-              }
-              setGeneratedMemberCard(memberCardData)
-              // Backup to storage (non-blocking)
-              backupMemberCardToStorage(userId, imageUrl)
-              // Show appropriate notification based on steganography inclusion
-              if (parsedResult.data.steganographyData) {
-                showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! 🔐 ✨', 'success')
-              } else {
-                showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! ✨', 'success')
-              }
-            } else if (parsedResult.data && parsedResult.data.html) {
-              // Convert HTML to image using canvas
-              const imageUrl = await convertHtmlToImage(parsedResult.data.html)
-              const memberCardData = {
-                ...parsedResult.data,
-                imageUrl: imageUrl
-              }
-              setGeneratedMemberCard(memberCardData)
-              // Backup to storage (non-blocking)
-              backupMemberCardToStorage(userId, imageUrl)
-              showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! ✨', 'success')
-            } else {
-              // Use debug data if this is test function, otherwise use actual data
-              const memberCardData = parsedResult.data || parsedResult.debug
-              setGeneratedMemberCard(memberCardData)
-              // Backup to storage (non-blocking) if imageUrl exists
-              if (memberCardData?.imageUrl) {
-                backupMemberCardToStorage(userId, memberCardData.imageUrl)
-              }
-              showNotification('🎉 Member Card အောင်မြင်စွာ ပြုလုပ်ပြီးပါပြီ! ✨', 'success')
-            }
-          } else {
-            throw new Error(parsedResult.message || 'Member card generation failed')
-          }
-        } else {
-          throw new Error('No response body received from cloud function')
-        }
+        console.log('🎴 Generating professional member card with zodiac template...');
+        
+        // Calculate zodiac sign from date of birth
+        const zodiacSign = calculateZodiacFromDOB(result.data.date_of_birth || formData.dateOfBirth);
+        console.log('♌ Zodiac sign:', zodiacSign);
+        
+        // Prepare member card data
+        const memberCardTemplate = {
+          templateFile: `${zodiacSign}.png`,
+          zodiacSign: zodiacSign,
+          userName: result.data.full_name || `${formData.firstName} ${formData.lastName}`,
+          memberId: result.data.member_id,
+          userEmail: result.data.email,
+          photoUrl: formData.publicPhoto, // Use base64 photo
+          positions: {
+            photo: { x: 39, y: 39, width: 203, height: 305, borderRadius: 15 },
+            name: { x: 270, y: 295, width: 284, height: 36, fontSize: 30, fontWeight: 'bold', fontFamily: 'Arial', color: '#000000' },
+            memberId: { x: 462, y: 355, width: 70, height: 13, fontSize: 13, fontWeight: 'normal', fontFamily: 'Arial', color: '#000000' }
+          },
+          canvasSize: { width: 576, height: 384 },
+          userId: userId
+        };
+        
+        // Render member card on canvas
+        await renderMemberCardOnCanvas(memberCardTemplate);
+        console.log('✅ Member card generated successfully with zodiac template!');
+        
       } catch (cardError) {
-        showNotification(`Member Card generation error: ${cardError.message}`, 'error')
+        console.error('❌ Member card generation failed:', cardError);
+        // Fallback: Use public photo as preview
+        setGeneratedMemberCard({
+          imageUrl: formData.publicPhoto,
+          userId: userId,
+          userName: result.data.full_name,
+          fallbackMode: true
+        });
       } finally {
-        setMemberCardGenerating(false)
+        setMemberCardGenerating(false);
       }
     } catch (error) {
       hideScreenLoading()
@@ -3335,7 +3488,7 @@ function App() {
     <ErrorBoundary>
       <div className="app">
         <Home
-          formData={{ ...formData, firstName: loggedInUser.firstName, publicPhoto: loggedInUser.publicPhoto }}
+          formData={formData}
           notification={notification}
           closeNotification={closeNotification}
           loggedInUser={loggedInUser}

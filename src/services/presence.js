@@ -76,12 +76,9 @@ class PresenceService {
         if (!this.currentUserId) return;
         try {
             const updateData = {
-                isOnline: isOnline,
-                lastSeen: new Date().toISOString()
+                is_online: isOnline,
+                last_seen: new Date().toISOString()
             };
-            if (isOnline) {
-                updateData.lastActiveAt = new Date().toISOString();
-            }
             await databases.updateDocument(
                 DATABASE_ID,
                 COLLECTIONS.USERS,
@@ -107,8 +104,8 @@ class PresenceService {
                 COLLECTIONS.USERS,
                 this.currentUserId,
                 {
-                    isOnline: false,
-                    lastSeen: new Date().toISOString()
+                    is_online: false,
+                    last_seen: new Date().toISOString()
                 }
             );
         } catch (error) {
@@ -123,8 +120,8 @@ class PresenceService {
                 userId
             );
             // Handle case where presence attributes don't exist yet
-            const lastSeen = user.lastSeen ? new Date(user.lastSeen) : null;
-            const isOnline = user.isOnline || false;
+            const lastSeen = user.last_seen ? new Date(user.last_seen) : null;
+            const isOnline = user.is_online || false;
             // Consider user offline if last seen was more than 3 minutes ago
             const ONLINE_THRESHOLD = 3 * 60 * 1000; // 3 minutes
             const isRecentlyActive = lastSeen && (Date.now() - lastSeen.getTime()) < ONLINE_THRESHOLD;

@@ -172,9 +172,12 @@ const Login = ({ onSuccess }) => {
       await authService.verifyExistingUserPasscode(userDoc.$id, code)
       onSuccess?.({
         $id: userDoc.$id,
-        memberID: userDoc.memberID,
-        firstName: userDoc.fullName || userDoc.firstName,
-        publicPhoto: userDoc.publicPhoto || null
+        member_id: userDoc.member_id,
+        first_name: userDoc.first_name,
+        full_name: userDoc.full_name,
+        public_photo: userDoc.public_photo || null,
+        zodiac_sign: userDoc.zodiac_sign || 'Aquarius',
+        email: userDoc.email
       })
     } catch (err) {
       setPassError(true)

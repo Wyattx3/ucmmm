@@ -13,7 +13,7 @@ export default defineConfig({
         // Code splitting for better caching
         manualChunks: {
           vendor: ['react', 'react-dom'],
-          appwrite: ['appwrite'],
+          supabase: ['@supabase/supabase-js'],
           styled: ['styled-components'],
           canvas: ['html2canvas']
         }

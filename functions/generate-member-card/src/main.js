@@ -87,30 +87,30 @@ module.exports = async ({ req, res, log, error }) => {
         let user;
         try {
             log('🔍 Attempting to get user from database:', userId);
-            log('🔍 Database ID: ucera-main, Collection: users');
-            user = await databases.getDocument('ucera-main', 'users', userId);
-            log('👤 User data retrieved successfully:', user.fullName || user.firstName);
+            log('🔍 Database ID: ucera_main_db, Collection: users');
+            user = await databases.getDocument('ucera_main_db', 'users', userId);
+            log('👤 User data retrieved successfully:', user.full_name || user.first_name);
             log('📧 User email:', user.email);
-            log('📸 User publicPhoto available:', !!user.publicPhoto);
+            log('📸 User public_photo available:', !!user.public_photo);
         } catch (dbError) {
             log('❌ Database access failed with error:', dbError.message);
             log('❌ Error code:', dbError.code);
             log('❌ Error type:', dbError.type);
-            // Use sample user data when database fails
+            // Use sample user data when database fails (snake_case)
             user = {
-                fullName: 'Sample User',
-                firstName: 'Sample',
-                lastName: 'User', 
-                dateOfBirth: '1995-08-15',
-                memberID: '1234567',
-                publicPhoto: null, // Use publicPhoto not publicPhotoUrl
-                publicPhotoUrl: null,
-                privatePhotoUrl: null
+                full_name: 'Sample User',
+                first_name: 'Sample',
+                last_name: 'User', 
+                date_of_birth: '1995-08-15',
+                member_id: '1234567',
+                public_photo: null,
+                public_photo_url: null,
+                private_photo_url: null
             };
         }
 
         // Calculate zodiac sign from date of birth
-        const zodiacSign = calculateZodiacSign(user.dateOfBirth);
+        const zodiacSign = calculateZodiacSign(user.date_of_birth);
         log('♌ Calculated zodiac sign:', zodiacSign);
 
         // Get template ID for zodiac sign
@@ -118,7 +118,7 @@ module.exports = async ({ req, res, log, error }) => {
         log('🎨 Template ID:', templateId);
 
         // Prepare photo URL - use public photo first, then private photo
-        let photoUrl = user.publicPhotoUrl || user.privatePhotoUrl;
+        let photoUrl = user.public_photo_url || user.private_photo_url;
         
         // If no photo URL, use a professional placeholder
         if (!photoUrl) {
@@ -134,10 +134,10 @@ module.exports = async ({ req, res, log, error }) => {
                     image: photoUrl
                 },
                 "Name": {
-                    text: user.fullName || `${user.firstName} ${user.lastName}`
+                    text: user.full_name || `${user.first_name} ${user.last_name}`
                 },
                 "Member ID No.": {
-                    text: user.memberID || user.memberId || '1234567'
+                    text: user.member_id || '1234567'
                 }
             }
         };
@@ -149,9 +149,9 @@ module.exports = async ({ req, res, log, error }) => {
         try {
             log('📋 Preparing member card data for frontend steganography...');
             
-            // Prepare user data
-            const userName = user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Sample User';
-            const memberId = user.memberID || user.memberId || '1234567';
+            // Prepare user data (using snake_case from database)
+            const userName = user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || 'Sample User';
+            const memberId = user.member_id || '1234567';
             const userEmail = user.email || 'unknown@email.com';
             
             // Prepare member card template data for frontend Canvas processing
@@ -161,7 +161,7 @@ module.exports = async ({ req, res, log, error }) => {
                 userName: userName,
                 memberId: memberId,
                 userEmail: userEmail,
-                photoUrl: user.publicPhoto || null,
+                photoUrl: user.public_photo || null,
                 positions: {
                     photo: { x: 39, y: 39, width: 203, height: 305, borderRadius: 15 },
                     name: { x: 270, y: 295, width: 284, height: 36, fontSize: 30, fontWeight: 'bold', fontFamily: 'Arial', color: '#000000' },
@@ -206,8 +206,8 @@ module.exports = async ({ req, res, log, error }) => {
                     imageUrl: fallbackImageUrl,
                     zodiacSign: zodiacSign,
                     templateId: templateId,
-                    userName: user.fullName || `${user.firstName} ${user.lastName}`,
-                    memberId: user.memberID || user.memberId || '1234567',
+                    userName: user.full_name || `${user.first_name} ${user.last_name}`,
+                    memberId: user.member_id || '1234567',
                     fallbackMode: true
                 }
             });

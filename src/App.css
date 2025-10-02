@@ -415,6 +415,7 @@ body {
 /* Welcome Screen Styles */
 .welcome-section {
   padding: 80px 40px 0;
+  padding-top: calc(80px + env(safe-area-inset-top));
   z-index: 2;
   position: relative;
 }
@@ -479,9 +480,12 @@ body {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(env(safe-area-inset-bottom) + var(--bottom-ui-offset, 0px));
+  bottom: 0;
   /* Keep the section fully inside the visible area on mobile */
-  padding: 24px 40px 24px 40px;
+  padding: 24px 40px;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  padding-left: max(40px, env(safe-area-inset-left));
+  padding-right: max(40px, env(safe-area-inset-right));
   z-index: 10;
   display: flex;
   flex-direction: column;
@@ -778,6 +782,7 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 20px 24px;
+  padding-top: calc(20px + env(safe-area-inset-top));
   border-bottom: 1px solid #f1f3f4;
 }
 
@@ -1009,7 +1014,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: clamp(12px, 3vw, 20px);
-  margin-bottom: clamp(24px, 8vh, 48px);
+  margin-bottom: 20px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
   align-items: center;
 }
 
@@ -1486,6 +1492,7 @@ body {
   
   .welcome-section {
     padding: 60px 30px 0;
+    padding-top: calc(60px + env(safe-area-inset-top));
   }
   
   .welcome-text {
@@ -1498,6 +1505,7 @@ body {
   
   .action-section {
     padding: 30px;
+    padding-bottom: calc(30px + env(safe-area-inset-bottom));
   }
 
   .form-content {
@@ -1506,6 +1514,7 @@ body {
 
   .form-header {
     padding: 16px 20px;
+    padding-top: calc(16px + env(safe-area-inset-top));
   }
 
   .form-footer {

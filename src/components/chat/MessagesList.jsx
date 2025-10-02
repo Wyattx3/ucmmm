@@ -29,6 +29,7 @@ const MessagesList = ({
   // Auto-scroll when typing indicator appears/disappears
   useEffect(() => {
     if (isTyping) {
+      console.log('📜 Auto-scrolling for typing indicator...')
       const timer = setTimeout(() => {
         scrollToTop()
       }, 150)

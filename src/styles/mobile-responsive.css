@@ -1,0 +1,601 @@
+/* ===== CAPACITOR MOBILE RESPONSIVE STYLES ===== */
+/* This file contains mobile-specific optimizations for Capacitor apps */
+
+/* Safe Area Insets for iOS Notch & Home Indicator */
+:root {
+  /* Safe area variables */
+  --safe-area-top: env(safe-area-inset-top);
+  --safe-area-bottom: env(safe-area-inset-bottom);
+  --safe-area-left: env(safe-area-inset-left);
+  --safe-area-right: env(safe-area-inset-right);
+  
+  /* Mobile-specific spacing */
+  --mobile-header-padding: max(20px, env(safe-area-inset-top));
+  --mobile-footer-padding: max(16px, env(safe-area-inset-bottom));
+  --mobile-side-padding: max(20px, env(safe-area-inset-left), env(safe-area-inset-right));
+}
+
+/* Prevent pull-to-refresh and overscroll effects */
+html, body {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+#root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+/* Container should fill entire screen on mobile */
+.app {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: 100% !important;
+  height: 100%;
+  min-height: 100%;
+  box-shadow: none;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Welcome Screen Mobile Adjustments with Safe Areas */
+.welcome-section {
+  padding-top: calc(80px + var(--safe-area-top)) !important;
+  padding-left: var(--mobile-side-padding);
+  padding-right: var(--mobile-side-padding);
+}
+
+/* Additional support for notch/Dynamic Island devices */
+@supports (padding-top: max(0px)) {
+  .welcome-section {
+    padding-top: max(80px, calc(80px + env(safe-area-inset-top))) !important;
+  }
+}
+
+.action-section {
+  padding-bottom: calc(24px + var(--safe-area-bottom)) !important;
+  padding-left: max(var(--mobile-side-padding), env(safe-area-inset-left)) !important;
+  padding-right: max(var(--mobile-side-padding), env(safe-area-inset-right)) !important;
+}
+
+/* Additional bottom safe area support */
+@supports (padding-bottom: max(0px)) {
+  .action-section {
+    padding-bottom: max(24px, calc(24px + env(safe-area-inset-bottom))) !important;
+  }
+}
+
+/* Form Header with Safe Area (Dynamic Island Support) */
+.form-header {
+  padding-top: calc(20px + var(--safe-area-top)) !important;
+  padding-left: var(--mobile-side-padding);
+  padding-right: var(--mobile-side-padding);
+}
+
+/* Additional support for iPhone 14 Pro+ Dynamic Island */
+@supports (padding-top: max(0px)) {
+  .form-header {
+    padding-top: max(20px, calc(20px + env(safe-area-inset-top))) !important;
+  }
+}
+
+/* Form Content with Safe Scrolling */
+.form-content {
+  padding-left: var(--mobile-side-padding);
+  padding-right: var(--mobile-side-padding);
+  padding-bottom: calc(120px + var(--safe-area-bottom)) !important;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  height: auto;
+}
+
+/* Form Footer with Safe Area */
+.form-footer {
+  padding-bottom: calc(16px + var(--safe-area-bottom)) !important;
+  padding-left: var(--mobile-side-padding);
+  padding-right: var(--mobile-side-padding);
+}
+
+/* Touch-Friendly Button Sizes */
+.next-button,
+.join-button,
+.member-card-button {
+  min-height: 56px;
+  font-size: 18px;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* Touch-Friendly Input Fields */
+.form-input,
+.phone-input,
+.otp-input {
+  min-height: 48px;
+  font-size: 16px !important; /* Prevent zoom on iOS */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Number Pad Touch Optimization */
+.number-button {
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  min-width: 64px;
+  min-height: 64px;
+}
+
+/* Notification Safe Area */
+.notification {
+  top: var(--safe-area-top);
+  left: var(--safe-area-left);
+  right: var(--safe-area-right);
+}
+
+/* ===== RESPONSIVE BREAKPOINTS ===== */
+
+/* Small phones (320px - 375px) */
+@media (max-width: 375px) {
+  .welcome-text {
+    font-size: 24px !important;
+  }
+  
+  .form-title,
+  .birth-title,
+  .verification-title {
+    font-size: 18px !important;
+  }
+  
+  .form-label {
+    font-size: 16px !important;
+  }
+  
+  .otp-input {
+    width: 38px !important;
+    height: 38px !important;
+    font-size: 14px !important;
+  }
+  
+  .number-button {
+    width: 58px !important;
+    height: 58px !important;
+    font-size: 18px !important;
+  }
+  
+  .passcode-dots {
+    gap: 10px !important;
+  }
+}
+
+/* Medium phones (376px - 414px) */
+@media (min-width: 376px) and (max-width: 414px) {
+  .welcome-text {
+    font-size: 26px;
+  }
+  
+  .form-title,
+  .birth-title,
+  .verification-title {
+    font-size: 20px;
+  }
+  
+  .otp-input {
+    width: 42px;
+    height: 42px;
+    font-size: 16px;
+  }
+  
+  .number-button {
+    width: 70px;
+    height: 70px;
+    font-size: 22px;
+  }
+}
+
+/* Large phones (415px+) */
+@media (min-width: 415px) {
+  .welcome-text {
+    font-size: 28px;
+  }
+  
+  .form-title,
+  .birth-title,
+  .verification-title {
+    font-size: 22px;
+  }
+  
+  .otp-input {
+    width: 46px;
+    height: 46px;
+    font-size: 18px;
+  }
+  
+  .number-button {
+    width: 78px;
+    height: 78px;
+    font-size: 24px;
+  }
+}
+
+/* Tablets and larger */
+@media (min-width: 768px) {
+  /* Center content on tablets */
+  .container {
+    max-width: 600px !important;
+    margin: 0 auto;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  
+  .form-content {
+    padding: 40px 40px calc(120px + var(--safe-area-bottom));
+  }
+}
+
+/* ===== LANDSCAPE MODE ===== */
+@media (orientation: landscape) and (max-height: 500px) {
+  .welcome-section {
+    padding-top: calc(30px + var(--safe-area-top));
+  }
+  
+  .welcome-text {
+    font-size: 22px !important;
+  }
+  
+  .ucera-logo {
+    width: 600px !important;
+  }
+  
+  .action-section {
+    padding-top: 16px;
+    padding-bottom: calc(16px + var(--safe-area-bottom)) !important;
+  }
+  
+  .form-content {
+    padding-top: 24px;
+    padding-bottom: calc(100px + var(--safe-area-bottom)) !important;
+  }
+  
+  .number-pad {
+    gap: 12px !important;
+    margin-bottom: 16px !important;
+    padding-bottom: max(20px, env(safe-area-inset-bottom, 0px)) !important;
+  }
+  
+  .number-row {
+    gap: 20px !important;
+  }
+  
+  .number-button {
+    width: 60px !important;
+    height: 60px !important;
+    font-size: 18px !important;
+  }
+  
+  .passcode-dots {
+    margin-bottom: 20px !important;
+  }
+  
+  .checkmark-circle {
+    width: 80px !important;
+    height: 80px !important;
+  }
+  
+  .checkmark {
+    font-size: 32px !important;
+  }
+}
+
+/* ===== TOUCH INTERACTIONS ===== */
+
+/* Remove 300ms tap delay on mobile */
+a, button, input, select, textarea {
+  touch-action: manipulation;
+}
+
+/* Improve button press feedback */
+.next-button:active,
+.join-button:active,
+.member-card-button:active {
+  transform: scale(0.98);
+}
+
+.number-button:active {
+  transform: scale(0.92);
+  background-color: #dee2e6 !important;
+}
+
+/* Prevent text selection on interactive elements */
+.number-button,
+.next-button,
+.join-button,
+.passcode-circle,
+.citizenship-option,
+.city-option {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* ===== SCROLLING IMPROVEMENTS ===== */
+
+/* Smooth scrolling for content areas */
+.form-content,
+.container {
+  scroll-behavior: smooth;
+}
+
+/* Hide scrollbar but keep functionality */
+.form-content::-webkit-scrollbar,
+.container::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+/* ===== PERFORMANCE OPTIMIZATIONS ===== */
+
+/* Use GPU acceleration for animations */
+.join-button,
+.next-button,
+.number-button,
+.ucera-logo,
+.checkmark-circle {
+  will-change: transform;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* Optimize rendering */
+.container,
+.form-content,
+.app {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ===== MEMBER CARD MOBILE RESPONSIVE ===== */
+
+@media (max-width: 640px) {
+  .member-card-success-content {
+    padding: 20px var(--mobile-side-padding) calc(70px + var(--safe-area-bottom));
+  }
+  
+  .member-card-container {
+    width: calc(100vw - 40px);
+    height: calc((100vw - 40px) * 384 / 576);
+    max-width: 480px;
+    max-height: 320px;
+  }
+  
+  .member-card-container .member-card-inner {
+    width: calc(100vw - 44px);
+    height: calc((100vw - 44px) * 384 / 576);
+    max-width: 476px;
+    max-height: 316px;
+  }
+  
+  .card-actions {
+    padding: 0 var(--mobile-side-padding);
+  }
+}
+
+/* ===== PHOTO CROPPER MOBILE ===== */
+
+.cropper-modal {
+  padding: var(--mobile-side-padding);
+  padding-top: calc(20px + var(--safe-area-top));
+  padding-bottom: calc(20px + var(--safe-area-bottom));
+}
+
+.cropper-content {
+  max-width: calc(100vw - 40px);
+  max-height: calc(100vh - 40px);
+}
+
+/* ===== SELECTION ITEMS MOBILE ===== */
+
+@media (max-width: 480px) {
+  .citizenship-option,
+  .city-option {
+    min-height: 52px;
+    padding: 12px var(--mobile-side-padding);
+  }
+  
+  .selection-grid {
+    padding: 0 8px;
+  }
+  
+  .love-language-grid {
+    padding: 0 8px;
+  }
+}
+
+/* ===== FIX FOR KEYBOARD APPEARANCE ===== */
+
+/* Prevent layout shift when keyboard appears */
+@supports (height: 100dvh) {
+  .app,
+  .container {
+    height: 100dvh;
+    min-height: 100dvh;
+  }
+}
+
+/* iOS Keyboard Fix */
+@supports (-webkit-touch-callout: none) {
+  .form-content {
+    /* Extra space for iOS keyboard */
+    min-height: calc(100vh - 200px);
+  }
+}
+
+/* ===== DARK MODE SUPPORT (Optional) ===== */
+
+@media (prefers-color-scheme: dark) {
+  /* You can add dark mode styles here if needed */
+  /* Example:
+  .container {
+    background-color: #1f2937;
+    color: #f3f4f6;
+  }
+  */
+}
+
+/* ===== ACCESSIBILITY ===== */
+
+/* Larger touch targets for accessibility */
+@media (pointer: coarse) {
+  .back-button,
+  .help-link,
+  .login-link,
+  .resend-button {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ===== FIX COMMON MOBILE ISSUES ===== */
+
+/* Prevent horizontal scrolling */
+body {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+/* Fix for iOS Safari bottom bar */
+@supports (-webkit-touch-callout: none) {
+  .action-section,
+  .form-footer {
+    padding-bottom: calc(24px + var(--safe-area-bottom) + 10px) !important;
+  }
+}
+
+/* Fix for Android System UI */
+@media (max-height: 600px) {
+  .form-content {
+    padding-bottom: calc(100px + var(--safe-area-bottom)) !important;
+  }
+}
+
+/* ===== NOTCH DEVICES (iPhone X+) ===== */
+
+@supports (padding: max(0px)) {
+  .welcome-section,
+  .form-header {
+    padding-top: max(20px, env(safe-area-inset-top));
+  }
+  
+  .action-section,
+  .form-footer,
+  .login-link {
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
+}
+
+/* ===== HIGH DPI SCREENS ===== */
+
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  /* Optimize for retina displays */
+  .ucera-logo,
+  .member-card-image,
+  .preview-image {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+}
+
+/* ===== VERY SMALL SCREENS (iPhone SE 1st gen) ===== */
+
+@media (max-width: 320px) {
+  .welcome-text {
+    font-size: 20px !important;
+  }
+  
+  .form-title,
+  .birth-title,
+  .verification-title {
+    font-size: 16px !important;
+  }
+  
+  .form-input,
+  .phone-input {
+    font-size: 14px !important;
+  }
+  
+  .otp-container {
+    gap: 6px !important;
+  }
+  
+  .otp-input {
+    width: 34px !important;
+    height: 34px !important;
+    font-size: 14px !important;
+  }
+  
+  .number-row {
+    gap: 16px !important;
+  }
+  
+  .number-button {
+    width: 52px !important;
+    height: 52px !important;
+    font-size: 16px !important;
+  }
+  
+  .next-button,
+  .join-button {
+    padding: 14px 20px;
+    font-size: 16px;
+  }
+}
+
+/* ===== EXTRA LARGE SCREENS (Tablets) ===== */
+
+@media (min-width: 1024px) {
+  .container {
+    max-width: 480px !important;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+  }
+}
+

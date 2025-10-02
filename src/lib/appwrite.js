@@ -52,7 +52,7 @@ console.log('💾 Database:', DATABASE_ID);
 // Force clear ALL cached data on every load for fresh start
 if (typeof window !== 'undefined') {
     const currentProjectId = projectId;
-    const cacheVersion = 'v52_real_online_counts'; // Real online counts for groups
+    const cacheVersion = 'v53_production_ready'; // Production ready - debug logs removed
     const cacheCleared = sessionStorage.getItem('cache_cleared_' + cacheVersion);
     
     if (!cacheCleared) {

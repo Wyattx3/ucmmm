@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import client, { databases, DATABASE_ID, COLLECTIONS, ID, Query } from '../lib/appwrite.js'
 import storageService from '../services/storage.js'
 import presenceService from '../services/presence.js'
-import { ZODIAC_COLORS } from '../utils/mockData.js'
+import { ZODIAC_COLORS, calculateZodiacSign } from '../utils/zodiac.js'
 import { navigate } from '../utils/ucera-routing.js'
 import './Home.css'
 import styled from 'styled-components'
@@ -12,10 +12,6 @@ import ChatConversation from './ChatConversation'
 import { AnimatePresence } from 'framer-motion'
 
 const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
-  // Component initialization
-  useEffect(() => {
-    // Component loaded
-  }, [loggedInUser]);
   
   // Restore open chat from localStorage on mount
   useEffect(() => {
@@ -28,7 +24,6 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
         setOpenChat(chat)
       }
     } catch (error) {
-      // Failed to restore chat
       localStorage.removeItem('ucera_open_chat')
     }
   }, [loggedInUser])
@@ -65,11 +60,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
       // - Individual IDs: "userId1_userId2" (with underscore)
       const isGroupChat = !chatId.includes('_') || openChat?.isGroup || false
       
-        chatId,
-        isGroupChat,
-        openChatIsGroup: openChat?.isGroup,
-        hasUnderscore: chatId.includes('_')
-      })
+      // Detect group chat by ID pattern
       
       // For group chats: query all messages that user hasn't read yet
       // For individual chats: query unread messages (is_read: false)
@@ -96,6 +87,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
           // For group messages: add user to read_by array
           const currentReadBy = msg.read_by || []
           
+          console.log('👥 Group message read status:', {
             id: msg.$id,
             from: msg.sender_name,
             currentReadBy: currentReadBy,
@@ -106,6 +98,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
           // Only update if user hasn't already read it
           if (!currentReadBy.includes(loggedInUser.$id)) {
             const newReadBy = [...currentReadBy, loggedInUser.$id]
+            console.log('✓✓ Updating group message read_by:', {
               id: msg.$id,
               oldReadBy: currentReadBy,
               newReadBy: newReadBy
@@ -121,6 +114,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                   read_at: new Date().toISOString()
                 }
               )
+              console.log('✅ Group message updated:', {
                 id: result.$id,
                 read_by: result.read_by,
                 count: result.read_by?.length || 0
@@ -131,9 +125,11 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
               throw error
             }
           } else {
+            console.log('⏭️ User already read this message')
           }
         } else {
           // For individual messages: use is_read flag
+          console.log('✓✓ Marking individual message as seen:', {
             id: msg.$id,
             from: msg.sender_name
           })
@@ -152,6 +148,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
       
       await Promise.allSettled(updatePromises.filter(p => p)) // Filter out undefined promises
       
+      console.log(`✅ Marked ${messagesToMark.documents.length} messages as read in chat ${chatId}`)
       
       // Update last message in state to reflect read status
       setLastMsgByChat(prev => {
@@ -171,7 +168,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
       console.error('Failed to mark messages as read:', error)
     }
   }
-  
+
   // Handle chat opening with clean URLs
   const handleChatOpen = (chat) => {
     setOpenChat(chat)
@@ -243,7 +240,9 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
     if (loggedInUser?.$id) {
       try {
         // updateURL(activeTab) - Remove this to prevent undefined function call
+        console.log('📱 Home component initialized for authenticated user')
       } catch (error) {
+        console.warn('⚠️ URL routing error:', error)
       }
     }
   }, [])
@@ -253,6 +252,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
     (async () => {
       // Production: Require authentication
       if (!loggedInUser?.$id) {
+        console.log('⚠️ Authentication required - no user data loaded')
         setAllMembers([])
         setMemberStatus({})
         return
@@ -270,50 +270,14 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
         const mapped = res.documents
           .filter(d => d.$id !== loggedInUser?.$id)
           .map((d, idx) => {
-            // Calculate zodiac sign from date of birth
-            const calculateZodiac = (dob) => {
-              if (!dob) return 'Aquarius'
-              const date = new Date(dob)
-              const month = date.getMonth() + 1
-              const day = date.getDate()
-              
-              if ((month == 3 && day >= 21) || (month == 4 && day <= 19)) return 'Aries'
-              if ((month == 4 && day >= 20) || (month == 5 && day <= 20)) return 'Taurus'
-              if ((month == 5 && day >= 21) || (month == 6 && day <= 20)) return 'Gemini'
-              if ((month == 6 && day >= 21) || (month == 7 && day <= 22)) return 'Cancer'
-              if ((month == 7 && day >= 23) || (month == 8 && day <= 22)) return 'Leo'
-              if ((month == 8 && day >= 23) || (month == 9 && day <= 22)) return 'Virgo'
-              if ((month == 9 && day >= 23) || (month == 10 && day <= 22)) return 'Libra'
-              if ((month == 10 && day >= 23) || (month == 11 && day <= 21)) return 'Scorpio'
-              if ((month == 11 && day >= 22) || (month == 12 && day <= 21)) return 'Sagittarius'
-              if ((month == 12 && day >= 22) || (month == 1 && day <= 19)) return 'Capricorn'
-              if ((month == 1 && day >= 20) || (month == 2 && day <= 18)) return 'Aquarius'
-              if ((month == 2 && day >= 19) || (month == 3 && day <= 20)) return 'Pisces'
-              return 'Aquarius'
-            }
-            
             return {
-              id: d.$id || `u-${idx}`, 
+            id: d.$id || `u-${idx}`, 
               name: d.full_name || d.first_name || 'Member', 
               publicPhoto: d.public_photo || null,
-              zodiacSign: calculateZodiac(d.date_of_birth),
+              zodiacSign: calculateZodiacSign(d.date_of_birth),
               gender: d.gender || null // Add gender field for group filtering
             }
           })
-        
-          total: mapped.length,
-          sample: mapped[0] ? {
-            name: mapped[0].name,
-            hasPhoto: !!mapped[0].publicPhoto,
-            zodiac: mapped[0].zodiacSign,
-            gender: mapped[0].gender
-          } : null,
-          genderCounts: {
-            male: mapped.filter(m => m.gender === 'male').length,
-            female: mapped.filter(m => m.gender === 'female').length,
-            other: mapped.filter(m => !m.gender || (m.gender !== 'male' && m.gender !== 'female')).length
-          }
-        })
         
         setAllMembers(mapped)
 
@@ -336,6 +300,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
           }
         }
       } catch (e) {
+        console.log('📝 Database unavailable, using Myanmar community members')
         // Production: Clear data on error
         console.error('Failed to load members:', e)
         setAllMembers([])
@@ -349,6 +314,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
     (async () => {
       // Production: Require authentication
       if (!loggedInUser?.$id) {
+        console.log('⚠️ Authentication required')
         setLastMsgByChat({})
         return
       }
@@ -358,22 +324,22 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
         
         // Load last messages for individual chats
         if (allMembers.length > 0) {
-          const BATCH_SIZE = 2
-          const members = allMembers.slice(0, 8)
+        const BATCH_SIZE = 2
+        const members = allMembers.slice(0, 8)
+        
+        for (let i = 0; i < members.length; i += BATCH_SIZE) {
+          const batch = members.slice(i, i + BATCH_SIZE)
+          if (i > 0) {
+            await new Promise(resolve => setTimeout(resolve, 300))
+          }
           
-          for (let i = 0; i < members.length; i += BATCH_SIZE) {
-            const batch = members.slice(i, i + BATCH_SIZE)
-            if (i > 0) {
-              await new Promise(resolve => setTimeout(resolve, 300))
-            }
-            
-            const batchResults = await Promise.allSettled(
-              batch.map(async (m) => {
-                try {
-                  const chatId = [loggedInUser?.$id, m.id].sort().join('_')
-                  const r = await databases.listDocuments(
-                    DATABASE_ID,
-                    COLLECTIONS.MESSAGES,
+          const batchResults = await Promise.allSettled(
+            batch.map(async (m) => {
+              try {
+                const chatId = [loggedInUser?.$id, m.id].sort().join('_')
+                const r = await databases.listDocuments(
+                  DATABASE_ID,
+                  COLLECTIONS.MESSAGES,
                     [Query.equal('chat_id', chatId), Query.orderDesc('created_at'), Query.limit(10)]
                   )
                   
@@ -381,32 +347,32 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                   const realMessages = r.documents.filter(d => !d.content?.startsWith('__TYPING_'))
                   const d = realMessages[0]
                   
-                  if (!d) {
-                    return [chatId, null]
-                  }
+                if (!d) {
+                  return [chatId, null]
+                }
                   const when = new Date(d.created_at || d.$createdAt)
                   const isFromMe = d.sender_id === loggedInUser?.$id
-                  const lastMsg = { 
+                const lastMsg = { 
                     text: d.content, 
                     imageUrl: d.image_url,
                     time: when.toISOString(),
                     isFromMe: isFromMe,
                     senderName: !isFromMe ? d.sender_name : null,
                     isUnread: !isFromMe && !d.is_read // Mark as unread if from other user and not read
-                  }
-                  return [chatId, lastMsg]
-                } catch (e) {
-                  const chatId = [loggedInUser?.$id, m.id].sort().join('_')
-                  return [chatId, null]
                 }
-              })
-            )
-            
-            batchResults.forEach((result) => {
-              if (result.status === 'fulfilled' && result.value) {
-                results.push(result.value)
+                return [chatId, lastMsg]
+              } catch (e) {
+                const chatId = [loggedInUser?.$id, m.id].sort().join('_')
+                return [chatId, null]
               }
             })
+          )
+          
+          batchResults.forEach((result) => {
+            if (result.status === 'fulfilled' && result.value) {
+              results.push(result.value)
+            }
+          })
           }
         }
         
@@ -438,6 +404,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
               results.push([groupId, lastMsg])
             }
           } catch (e) {
+            console.warn(`Failed to load last message for group ${groupId}:`, e)
           }
         }
         
@@ -455,12 +422,15 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
   // Load messages for open chat - Production mode
   useEffect(() => {
     if (!openChat) {
+      console.log('📭 No open chat')
       return
     }
     
+    console.log('📬 Loading messages for chat:', openChat.name || openChat.id)
     
     // Production: Require authentication
     if (!loggedInUser?.$id) {
+      console.log('⚠️ Authentication required for loading messages')
       setMessagesByChat(prev => ({
         ...prev,
         [openChat.id]: []
@@ -473,6 +443,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
     const loadMessages = async () => {
       try {
         const cachedMessages = messagesByChat[openChat.id]
+        console.log('💾 Cached messages check:', {
           chatId: openChat.id,
           hasCached: !!cachedMessages,
           cachedCount: cachedMessages?.length || 0
@@ -493,6 +464,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
           query.unshift(Query.equal('chat_id', openChat.id))
         }
 
+        console.log('🔍 Querying database for messages...', {
           chatId: openChat.id,
           isGroup: openChat.isGroup,
           order: 'DESC (latest first)',
@@ -505,31 +477,10 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
           query
         )
         
+        console.log('📦 Database response:', {
           totalDocs: res.documents.length,
           chatId: openChat.id
         })
-        
-        // Calculate zodiac sign from date of birth
-        const calculateZodiac = (dob) => {
-          if (!dob) return 'Aquarius'
-          const date = new Date(dob)
-          const month = date.getMonth() + 1
-          const day = date.getDate()
-          
-          if ((month == 3 && day >= 21) || (month == 4 && day <= 19)) return 'Aries'
-          if ((month == 4 && day >= 20) || (month == 5 && day <= 20)) return 'Taurus'
-          if ((month == 5 && day >= 21) || (month == 6 && day <= 20)) return 'Gemini'
-          if ((month == 6 && day >= 21) || (month == 7 && day <= 22)) return 'Cancer'
-          if ((month == 7 && day >= 23) || (month == 8 && day <= 22)) return 'Leo'
-          if ((month == 8 && day >= 23) || (month == 9 && day <= 22)) return 'Virgo'
-          if ((month == 9 && day >= 23) || (month == 10 && day <= 22)) return 'Libra'
-          if ((month == 10 && day >= 23) || (month == 11 && day <= 21)) return 'Scorpio'
-          if ((month == 11 && day >= 22) || (month == 12 && day <= 21)) return 'Sagittarius'
-          if ((month == 12 && day >= 22) || (month == 1 && day <= 19)) return 'Capricorn'
-          if ((month == 1 && day >= 20) || (month == 2 && day <= 18)) return 'Aquarius'
-          if ((month == 2 && day >= 19) || (month == 3 && day <= 20)) return 'Pisces'
-          return 'Aquarius'
-        }
         
         // Get unique sender IDs (excluding current user)
         const uniqueSenderIds = [...new Set(
@@ -552,10 +503,11 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
             // Map user IDs to their zodiac signs
             usersRes.documents.forEach(user => {
               if (uniqueSenderIds.includes(user.$id)) {
-                senderZodiacs[user.$id] = calculateZodiac(user.date_of_birth)
+                senderZodiacs[user.$id] = calculateZodiacSign(user.date_of_birth)
               }
             })
           } catch (err) {
+            console.log('⚠️ Could not fetch sender zodiac data:', err.message)
           }
         }
         
@@ -576,7 +528,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
           // Get sender zodiac: from DB field, or calculated from user profile, or current user's, or default
           const senderZodiac = d.sender_zodiac || 
                               senderZodiacs[d.sender_id] || 
-                              (isMe ? calculateZodiac(loggedInUser?.date_of_birth) : 'Aquarius')
+                              (isMe ? calculateZodiacSign(loggedInUser?.date_of_birth) : 'Aquarius')
           
           return {
             id: d.$id,
@@ -598,6 +550,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
           }
         })
         
+        console.log('✅ Messages loaded from database:', {
           count: messages.length,
           chatId: openChat.id
         })
@@ -610,6 +563,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
             !dbMessageIds.has(msg.id) && msg.id.startsWith('temp_')
           )
           const finalMessages = [...messages, ...nonDuplicateCurrentMessages]
+          console.log('📝 Setting messages state:', {
             dbMessages: messages.length,
             tempMessages: tempMessages.length,
             finalCount: finalMessages.length
@@ -634,6 +588,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
   const handleTypingStart = async () => {
     if (!openChat || !loggedInUser) return
     
+    console.log('⌨️ Broadcasting typing START:', {
       chatId: openChat.id,
       userId: loggedInUser.$id,
       userName: loggedInUser.full_name || loggedInUser.first_name
@@ -664,11 +619,13 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
           group_id: openChat.isGroup ? openChat.id : null
         }
       )
+      console.log('✅ Typing START broadcasted:', doc.$id)
       
       // Delete this temporary typing indicator after 5 seconds
       setTimeout(async () => {
         try {
           await databases.deleteDocument(DATABASE_ID, COLLECTIONS.MESSAGES, doc.$id)
+          console.log('🗑️ Typing indicator deleted:', doc.$id)
         } catch (e) {
           // Ignore deletion errors
         }
@@ -681,6 +638,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
   const handleTypingStop = async () => {
     if (!openChat || !loggedInUser) return
     
+    console.log('⌨️ Broadcasting typing STOP:', {
       chatId: openChat.id,
       userId: loggedInUser.$id
     })
@@ -710,11 +668,13 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
           group_id: openChat.isGroup ? openChat.id : null
         }
       )
+      console.log('✅ Typing STOP broadcasted:', doc.$id)
       
       // Delete this temporary typing indicator immediately after broadcast
       setTimeout(async () => {
         try {
           await databases.deleteDocument(DATABASE_ID, COLLECTIONS.MESSAGES, doc.$id)
+          console.log('🗑️ Typing STOP indicator deleted:', doc.$id)
         } catch (e) {
           // Ignore deletion errors
         }
@@ -723,7 +683,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
       console.error('❌ Typing stop broadcast failed:', error)
     }
   }
-  
+
   // Handle sending messages with image support
   const handleSendMessage = async (text, imageFile = null) => {
     if (!openChat || !loggedInUser) return
@@ -734,36 +694,16 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
     // Handle image upload if file is provided
     if (imageFile) {
       try {
+        console.log('📤 Uploading chat image to Appwrite Storage...')
         const uploadResult = await storageService.uploadChatImage(imageFile, loggedInUser.$id)
         imageUrl = uploadResult.url
         imageFileId = uploadResult.fileId
+        console.log('✅ Image uploaded successfully:', { imageUrl, fileId: imageFileId })
       } catch (error) {
         console.error('❌ Image upload failed:', error)
         alert('ပုံတင်ရာတွင် အမှားရှိပါသည်။ ထပ်စမ်းကြည့်ပါ။')
         return // Don't send message if image upload fails
       }
-    }
-    
-    // Calculate zodiac sign from date of birth
-    const calculateZodiac = (dob) => {
-      if (!dob) return 'Aquarius'
-      const date = new Date(dob)
-      const month = date.getMonth() + 1
-      const day = date.getDate()
-      
-      if ((month == 3 && day >= 21) || (month == 4 && day <= 19)) return 'Aries'
-      if ((month == 4 && day >= 20) || (month == 5 && day <= 20)) return 'Taurus'
-      if ((month == 5 && day >= 21) || (month == 6 && day <= 20)) return 'Gemini'
-      if ((month == 6 && day >= 21) || (month == 7 && day <= 22)) return 'Cancer'
-      if ((month == 7 && day >= 23) || (month == 8 && day <= 22)) return 'Leo'
-      if ((month == 8 && day >= 23) || (month == 9 && day <= 22)) return 'Virgo'
-      if ((month == 9 && day >= 23) || (month == 10 && day <= 22)) return 'Libra'
-      if ((month == 10 && day >= 23) || (month == 11 && day <= 21)) return 'Scorpio'
-      if ((month == 11 && day >= 22) || (month == 12 && day <= 21)) return 'Sagittarius'
-      if ((month == 12 && day >= 22) || (month == 1 && day <= 19)) return 'Capricorn'
-      if ((month == 1 && day >= 20) || (month == 2 && day <= 18)) return 'Aquarius'
-      if ((month == 2 && day >= 19) || (month == 3 && day <= 20)) return 'Pisces'
-      return 'Aquarius'
     }
     
     const tempId = `temp_${Date.now()}`
@@ -776,7 +716,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
       senderId: loggedInUser.$id,
       senderName: loggedInUser.full_name || loggedInUser.first_name,
       senderAvatar: loggedInUser.public_photo,
-      senderZodiac: calculateZodiac(loggedInUser.date_of_birth),
+      senderZodiac: calculateZodiacSign(loggedInUser.date_of_birth),
       createdAt: timestamp,
       time: timestamp,
       dbSaved: false,
@@ -804,28 +744,6 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
     
     // Save to database with group support
     try {
-      // Calculate zodiac sign from date of birth
-      const calculateZodiac = (dob) => {
-        if (!dob) return 'Aquarius'
-        const date = new Date(dob)
-        const month = date.getMonth() + 1
-        const day = date.getDate()
-        
-        if ((month == 3 && day >= 21) || (month == 4 && day <= 19)) return 'Aries'
-        if ((month == 4 && day >= 20) || (month == 5 && day <= 20)) return 'Taurus'
-        if ((month == 5 && day >= 21) || (month == 6 && day <= 20)) return 'Gemini'
-        if ((month == 6 && day >= 21) || (month == 7 && day <= 22)) return 'Cancer'
-        if ((month == 7 && day >= 23) || (month == 8 && day <= 22)) return 'Leo'
-        if ((month == 8 && day >= 23) || (month == 9 && day <= 22)) return 'Virgo'
-        if ((month == 9 && day >= 23) || (month == 10 && day <= 22)) return 'Libra'
-        if ((month == 10 && day >= 23) || (month == 11 && day <= 21)) return 'Scorpio'
-        if ((month == 11 && day >= 22) || (month == 12 && day <= 21)) return 'Sagittarius'
-        if ((month == 12 && day >= 22) || (month == 1 && day <= 19)) return 'Capricorn'
-        if ((month == 1 && day >= 20) || (month == 2 && day <= 18)) return 'Aquarius'
-        if ((month == 2 && day >= 19) || (month == 3 && day <= 20)) return 'Pisces'
-        return 'Aquarius'
-      }
-      
       const messageData = {
         chat_id: openChat.id,
         content: newMessage.text || '', // Empty string if only image
@@ -833,7 +751,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
         sender_id: loggedInUser.$id,
         sender_name: loggedInUser.full_name || loggedInUser.first_name,
         sender_avatar: loggedInUser.public_photo,
-        // sender_zodiac: calculateZodiac(loggedInUser.date_of_birth), // TODO: Add after creating database field
+        // sender_zodiac: calculateZodiacSign(loggedInUser.date_of_birth), // TODO: Add after creating database field
         image_url: newMessage.imageUrl || null,
         // Set defaults for other fields to avoid null issues
         receiver_id: !openChat.isGroup ? openChat.otherUserId : null,
@@ -846,6 +764,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
         group_id: openChat.isGroup ? openChat.id : null
       }
       
+      console.log('📤 Sending message to database:', {
         chatId: openChat.id,
         content: messageData.content,
         hasText: !!messageData.content,
@@ -861,6 +780,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
         messageData
       )
       
+      console.log('✅ Message saved to database:', {
         id: savedMessage.$id,
         chatId: savedMessage.chat_id,
         content: savedMessage.content
@@ -884,6 +804,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
           )
         }))
         
+        console.log('✓ Message delivered (single tick):', {
           id: savedMessage.$id,
           delivered: true,
           seen: false
@@ -891,6 +812,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
       }, 500) // Small delay for smooth transition
       
       } catch (e) {
+        console.warn('Failed to save message to database, keeping local message:', e)
         
         // In development mode, simulate successful save with smooth transition
         setTimeout(() => {
@@ -957,6 +879,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                 ? readBy.length > 0 
                 : (updatedMessage.is_read || false)
               
+              console.log('🔄 Message updated:', {
                 id: messageId,
                 isGroup,
                 isRead: updatedMessage.is_read,
@@ -987,6 +910,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                         : msg
                     )
                     didUpdate = true
+                    console.log('✅ Updated message seen status:', {
                       chatId,
                       messageId,
                       seen: seenStatus,
@@ -1022,6 +946,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                 const chatId = newMessage.chat_id
                 const senderId = newMessage.sender_id
                 
+                console.log('📨 Typing event received:', {
                   type: newMessage.content,
                   chatId,
                   senderId,
@@ -1032,10 +957,12 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                 
                 // Don't show typing indicator for current user
                 if (senderId === loggedInUser.$id) {
+                  console.log('⏭️ Skipping own typing event')
                   return
                 }
                 
                 if (newMessage.content === '__TYPING_START__') {
+                  console.log('✅ Setting typing indicator:', newMessage.sender_name)
                   setTypingUsers(prev => {
                     const updated = {
                       ...prev,
@@ -1048,9 +975,11 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                         }
                       }
                     }
+                    console.log('📝 Updated typingUsers:', updated)
                     return updated
                   })
                 } else if (newMessage.content === '__TYPING_STOP__') {
+                  console.log('🛑 Removing typing indicator:', newMessage.sender_name)
                   setTypingUsers(prev => {
                     const chatTyping = { ...(prev[chatId] || {}) }
                     delete chatTyping[senderId]
@@ -1126,6 +1055,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
         activeSubscriptionRef.current = unsubscribe
         return unsubscribe
       } catch (error) {
+        console.warn('Real-time subscription failed, running in local mode:', error)
         // Don't retry in development - just use local mode
         return null
       }
@@ -1159,6 +1089,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
   useEffect(() => {
     if (!loggedInUser || allMembers.length === 0) return
     
+    console.log('🔔 Subscribing to user status updates...')
     
     const unsubscribe = client.subscribe(
       [`databases.${DATABASE_ID}.collections.${COLLECTIONS.USERS}.documents`],
@@ -1180,6 +1111,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
         const isOnlineEffective = isOnlineFlag && isRecentlyActive
         const statusText = presenceService.getStatusText(isOnlineEffective, lastSeen)
         
+        console.log('👤 User status updated:', {
           userId,
           name: allMembers.find(m => m.id === userId)?.name,
           isOnline: isOnlineEffective,
@@ -1200,6 +1132,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
     return () => {
       try { 
         unsubscribe()
+        console.log('🔕 Unsubscribed from user status updates')
       } catch {}
     }
   }, [loggedInUser, allMembers])
@@ -1213,6 +1146,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
         const userIds = allMembers.map(m => m.id)
         const statusMap = await presenceService.getBulkUserStatus(userIds)
         setMemberStatus(prev => ({...prev, ...statusMap}))
+        console.log('🔄 Member status refreshed')
       } catch (error) {
         console.error('Error updating member status:', error)
       }
@@ -1315,27 +1249,7 @@ const Home = ({ formData, notification, closeNotification, loggedInUser }) => {
                           // Check if chatting with self (own user ID)
                           if (openChat.otherUserId === loggedInUser?.$id) {
                             // Use own zodiac
-                            const calculateZodiac = (dob) => {
-                              if (!dob) return 'Aquarius'
-                              const date = new Date(dob)
-                              const month = date.getMonth() + 1
-                              const day = date.getDate()
-                              
-                              if ((month == 3 && day >= 21) || (month == 4 && day <= 19)) return 'Aries'
-                              if ((month == 4 && day >= 20) || (month == 5 && day <= 20)) return 'Taurus'
-                              if ((month == 5 && day >= 21) || (month == 6 && day <= 20)) return 'Gemini'
-                              if ((month == 6 && day >= 21) || (month == 7 && day <= 22)) return 'Cancer'
-                              if ((month == 7 && day >= 23) || (month == 8 && day <= 22)) return 'Leo'
-                              if ((month == 8 && day >= 23) || (month == 9 && day <= 22)) return 'Virgo'
-                              if ((month == 9 && day >= 23) || (month == 10 && day <= 22)) return 'Libra'
-                              if ((month == 10 && day >= 23) || (month == 11 && day <= 21)) return 'Scorpio'
-                              if ((month == 11 && day >= 22) || (month == 12 && day <= 21)) return 'Sagittarius'
-                              if ((month == 12 && day >= 22) || (month == 1 && day <= 19)) return 'Capricorn'
-                              if ((month == 1 && day >= 20) || (month == 2 && day <= 18)) return 'Aquarius'
-                              if ((month == 2 && day >= 19) || (month == 3 && day <= 20)) return 'Pisces'
-                              return 'Aquarius'
-                            }
-                            return calculateZodiac(loggedInUser.date_of_birth)
+                            return calculateZodiacSign(loggedInUser.date_of_birth)
                           }
                           
                           // Find other user in members

@@ -27,6 +27,7 @@ const ChatConversation = ({
   
   // Debug: Log typing state
   useEffect(() => {
+    console.log('💬 ChatConversation typing state:', {
       typingUsers,
       typingUserIds,
       isTyping,

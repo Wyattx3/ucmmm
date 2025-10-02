@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import styled from 'styled-components'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ZODIAC_COLORS } from '../utils/mockData'
+import { ZODIAC_COLORS } from '../utils/zodiac'
 
 const ChatList = ({ 
   members = [], 
@@ -70,7 +70,7 @@ const ChatList = ({
   // Filter groups based on current user's gender
   // Main group is visible to all, boy/girl groups only to respective genders
   const fixedGroups = useMemo(() => {
-    const filtered = allGroups.filter(group => {
+    return allGroups.filter(group => {
       // Main group is always visible
       if (group.id === 'uc-main-group') return true
       
@@ -81,15 +81,6 @@ const ChatList = ({
       
       return true
     })
-    
-      currentUserGender,
-      totalMembers: members.length,
-      boyMembers: boyGroupMembers.length,
-      girlMembers: girlGroupMembers.length,
-      visibleGroups: filtered.map(g => g.name)
-    })
-    
-    return filtered
   }, [currentUserGender, boyGroupMembers.length, girlGroupMembers.length, members.length])
 
   // Define getChatId function with proper hoisting

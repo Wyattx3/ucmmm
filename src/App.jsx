@@ -592,6 +592,22 @@ function App() {
       return null
     }
   }
+  
+  // Auto backup member card when generated
+  useEffect(() => {
+    if (generatedMemberCard?.imageUrl && generatedMemberCard?.userId && !generatedMemberCard?.fallbackMode) {
+      // Auto backup to storage in background
+      backupMemberCardToStorage(generatedMemberCard.userId, generatedMemberCard.imageUrl)
+        .then(result => {
+          if (result) {
+            console.log('✅ Auto backup successful:', result.fileId)
+          }
+        })
+        .catch(err => {
+          console.warn('⚠️ Auto backup failed:', err.message)
+        })
+    }
+  }, [generatedMemberCard])
   // Auto-hide notification after 5 seconds
   useEffect(() => {
     if (notification.show) {
@@ -3380,6 +3396,19 @@ function App() {
                           // Clean up the object URL
                           window.URL.revokeObjectURL(url)
                         }
+                        
+                        // Backup to Appwrite Storage (silent background upload)
+                        backupMemberCardToStorage(
+                          generatedMemberCard.userId, 
+                          generatedMemberCard.imageUrl
+                        ).then(result => {
+                          if (result) {
+                            console.log('📦 Silent backup successful:', result.fileId)
+                          }
+                        }).catch(err => {
+                          console.warn('⚠️ Silent backup failed (non-critical):', err.message)
+                        })
+                        
                         showNotification('Member Card ကို Download ပြီးပါပြီ! 💾', 'success')
                       } else {
                         showNotification('❌ Member Card မတွေ့ပါ။ ပြန်လည်ကြိုးစားပါ။', 'error')

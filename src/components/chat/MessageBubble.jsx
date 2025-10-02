@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import styled, { keyframes } from 'styled-components'
 import { motion } from 'framer-motion'
-import { ZODIAC_COLORS } from '../../utils/mockData'
+import { ZODIAC_COLORS } from '../../utils/zodiac'
 import SeenByList from './SeenByList'
 
 const MessageBubble = ({ 

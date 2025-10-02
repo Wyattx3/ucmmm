@@ -237,8 +237,8 @@ const Login = ({ onSuccess }) => {
         {decoded && userDoc && (
           <section>
             <Summary>
-              <div className="row"><span>Member</span><b>{userDoc.fullName || userDoc.firstName}</b></div>
-              <div className="row"><span>Member ID</span><b>{userDoc.memberID}</b></div>
+              <div className="row"><span>Member</span><b>{userDoc.full_name || userDoc.first_name || 'Member'}</b></div>
+              <div className="row"><span>Member ID</span><b>{userDoc.member_id || 'N/A'}</b></div>
             </Summary>
             <label className="label">Passcode</label>
             <div className={`passcode-dots ${passError ? 'error shake' : ''}`}>
@@ -292,19 +292,37 @@ const Screen = styled.div`
   padding-bottom: calc(32px + env(safe-area-inset-bottom) + var(--bottom-ui-offset, 0px));
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
+  overflow-y: auto;
+  overflow-x: hidden;
 `
 
 const Header = styled.header`
-  padding: 24px 16px 8px 16px; text-align: center;
-  img { height: clamp(80px, 18vw, 140px); opacity: .95; }
+  padding: 40px 16px 8px 16px; text-align: center;
+  padding-top: max(40px, env(safe-area-inset-top, 20px));
+  img { height: 120px; opacity: .95; }
   h1 { margin: 8px 0 4px 0; font-size: 20px; color: #0f172a; }
   .sub { margin: 0; color: #94a3b8; font-size: 12px; }
-  @media (min-width: 480px) { h1 { font-size: 22px; } }
+  @media (min-width: 480px) { 
+    padding-top: 60px;
+    img { height: 140px; }
+    h1 { font-size: 22px; } 
+  }
+  @media (min-height: 800px) {
+    padding-top: 80px;
+    img { height: 160px; }
+  }
 `
 
 const Content = styled.main`
-  width: 100%; max-width: 720px; margin: 0 auto; padding: 12px 16px 24px 16px; display: grid; gap: 14px;
+  width: 100%; 
+  max-width: 720px; 
+  margin: 0 auto; 
+  padding: 12px 16px 24px 16px; 
+  padding-bottom: max(24px, calc(24px + env(safe-area-inset-bottom, 0px)));
+  display: grid; 
+  gap: 14px;
+  flex: 1;
   .label { font-size: 12px; color: #64748b; display: block; margin-bottom: 8px; }
 `
 const Field = styled.div`

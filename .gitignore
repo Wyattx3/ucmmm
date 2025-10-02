@@ -31,3 +31,12 @@ appwrite.config.json
 *.sln
 *.sw?
 .vercel
+
+# Capacitor / Mobile
+ios/App/Pods/
+ios/App/App.xcworkspace/
+android/build/
+android/app/build/
+android/.gradle/
+*.keystore
+*.jks

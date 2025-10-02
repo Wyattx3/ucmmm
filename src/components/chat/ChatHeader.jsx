@@ -1,6 +1,6 @@
 import React from 'react'
 import styled from 'styled-components'
-import { ZODIAC_COLORS } from '../../utils/mockData'
+import { ZODIAC_COLORS } from '../../utils/zodiac'
 
 const ChatHeader = ({ 
   chat, 
@@ -36,17 +36,6 @@ const ChatHeader = ({
   }
 
   const onlineCount = getOnlineCount()
-
-  // Debug log for group statistics
-  if (chat?.isGroup) {
-      groupId: chat.id,
-      groupName: chat.name,
-      totalMembers: chat.memberCount,
-      onlineCount: onlineCount,
-      allMembersCount: allMembers.length,
-      memberStatusCount: Object.keys(memberStatus).length
-    })
-  }
 
   return (
     <Header>
